@@ -150,58 +150,6 @@ for v in W:
                                    rhs=rhs)
 
 
-# class SubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCallback):
-
-#     def __call__(self):
-#         sol = self.get_values()
-#         dsol = {}
-#         for i in ralen(sol):
-#             dsol[vnames[i]] = sol[i]
-
-#         for start_node in W:
-#             for i in ralen(bs):
-#                 in_route = False
-#                 for v2 in g[start_node]:
-#                     if dsol['b' + str(i) + '_' + str(start_node) + '_' + str(v2)] > .5:
-#                         in_route = True
-#                 if not in_route:
-#                     continue
-
-#                 seen_nodes = [start_node]
-#                 while True:
-#                     for v2 in g[seen_nodes[-1]]:
-#                         if dsol['b' + str(i) + '_' + str(seen_nodes[-1]) + '_' + str(v2)] > .5:
-#                             seen_nodes.append(v2)
-#                             break
-#                     # , [k for k, v in dsol.items() if v > .5])
-#                     # print(seen_nodes)
-#                     if seen_nodes[-1] == sp or seen_nodes[-1] in seen_nodes[:-1]:
-#                         break
-
-#                 if seen_nodes[-1] in seen_nodes[:-1]:  # cycle
-#                     seen_nodes = seen_nodes[:-1]
-#                     print("Found subtour on bus", i, ":", seen_nodes)
-#                     rhs = 1
-#                     sense = 'G'
-#                     constraint = [
-#                         ['b' + str(i2) + '_' + str(v1) + '_' + str(v2)
-#                          for i2 in ralen(bs) for v1 in seen_nodes for v2 in g[v1] if v2 not in seen_nodes],
-
-#                         [1
-#                          for i2 in ralen(bs) for v1 in seen_nodes for v2 in g[v1] if v2 not in seen_nodes]]
-#                     print(constraint)
-#                     # constraint = [
-#                     #     ['b' + str(i2) + '_' + str(v1) + '_' + str(v2)
-#                     #         for v1 in seen_nodes for v2 in seen_nodes
-#                     #         if v1 != v2 and 'b' + str(i2) + '_' + str(v1) + '_' + str(v2) in vnames],
-#                     #     [1 for v1 in seen_nodes for v2 in seen_nodes
-#                     #         if v1 != v2 and 'b' + str(i2) + '_' + str(v1) + '_' + str(v2) in vnames]
-#                     # ]
-#                     self.add(constraint=constraint,
-#                              sense=sense,
-#                              rhs=rhs)
-
-
 class NoSeparateSubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCallback):
 
     def __call__(self):
