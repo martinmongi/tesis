@@ -1,6 +1,6 @@
 import random
 
-N = 10
+N = 30
 W_size = int(N**1.5)
 
 g = {i: {} for i in range(N * N)}
