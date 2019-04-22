@@ -2,7 +2,7 @@ import cplex
 from collections import defaultdict, deque, Counter
 from heapq import *
 from sys import argv
-from utils import dist, graphs
+from utils import dist, graphs, heuristic_sbrp, product_constraints
 
 # INPUT
 with open(argv[1], 'r') as f:
@@ -13,7 +13,8 @@ with open(argv[1], 'r') as f:
     std_stp = {k: [v for v in range(len(stops)) if dist(
         stops[v], students[k]) <= max_walk_dist] for k in range(len(students))}
     depots = eval(ls[3])
-    g = eval(ls[4])
+    capacity = eval(ls[4])
+    g = eval(ls[5])
 
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
@@ -21,17 +22,30 @@ problem.objective.set_sense(problem.objective.sense.minimize)
 vnames = ['student_stop_' + str(std_i) + '_' + str(stp_i)
           for std_i in std_stp for stp_i in std_stp[std_i]] + \
     ["bus_edge_" + str(i) + "_" + str(v1) + "_" + str(v2)
-     for i in depots for v1 in g for v2 in g]
+     for i in depots for v1 in g for v2 in g] + \
+    ["stopload_" + str(sp_i) for sp_i in range(len(stops))] + \
+    ["bus_stop_" + str(i) + '_' + str(stp_i)
+     for i in depots for stp_i in range(len(stops))] + \
+    ["bus_stopload_" + str(i) + "_" + str(sp_i)
+     for i in depots for sp_i in range(len(stops))]
 
 vtypes = [problem.variables.type.binary
           for std_i in std_stp for stp_i in std_stp[std_i]] + \
     [problem.variables.type.binary
-     for i in depots for v1 in g for v2 in g]
+     for i in depots for v1 in g for v2 in g] + \
+    [problem.variables.type.integer for i in range(len(stops))] + \
+    [problem.variables.type.binary
+     for i in depots for stp_i in range(len(stops))] + \
+    [problem.variables.type.integer
+     for i in depots for sp_i in range(len(stops))]
 
 vobj = [dist(students[std_i], stops[stp_i]) * 0
         for std_i in std_stp for stp_i in std_stp[std_i]] + \
     [g[v1][v2]
-     for i in depots for v1 in g for v2 in g]
+     for i in depots for v1 in g for v2 in g] + \
+    [0 for i in range(len(stops))] + \
+    [0 for i in depots for stp_i in range(len(stops))] + \
+    [0 for i in depots for sp_i in range(len(stops))]
 
 problem.variables.add(obj=vobj,
                       lb=None,
@@ -90,7 +104,6 @@ problem.linear_constraints.add(lin_expr=[constraint],
                                senses=sense,
                                rhs=rhs,
                                names=['school_degree_out'])
-
 
 rhs = [0]
 sense = 'E'
@@ -162,16 +175,58 @@ for st_i in range(len(students)):
                                    senses=sense,
                                    rhs=rhs)
 
-# # If too far, student can't go to stop
-# for st_i in range(len(students)):
-#     for sp_i in range(len(stops)):
-#         if dist(stops[sp_i], students[st_i]) > max_walk_dist or sp_i == 0:
-#             rhs = [0]
-#             sense = 'E'
-#             constraint = [['student_stop_' + str(st_i) + '_' + str(sp_i)], [1]]
-#             problem.linear_constraints.add(lin_expr=[constraint],
-#                                            senses=sense,
-#                                            rhs=rhs)
+# Stop loads
+for sp_i in range(len(stops)):
+    rhs = [0]
+    sense = 'E'
+    constraint = [
+        ['student_stop_' + str(st_i) + '_' + str(sp_i)
+         for st_i in range(len(students)) if sp_i in std_stp[st_i]] +
+        ['stopload_' + str(sp_i)],
+        [-1 for st_i in range(len(students)) if sp_i in std_stp[st_i]] + [1]
+    ]
+    problem.linear_constraints.add(lin_expr=[constraint],
+                                   senses=sense,
+                                   rhs=rhs)
+
+# Bus stops
+for sp_i in range(len(stops)):
+    for b in depots:
+        rhs = [0]
+        sense = 'E'
+        constraint = [
+            ["bus_edge_" + str(b) + "_" + str(sp_i) + "_" + str(v) for v in range(len(stops))] +
+            ['bus_stop_' + str(b) + "_" + str(sp_i)],
+            [1 for v in range(len(stops))] + [-1]
+        ]
+        problem.linear_constraints.add(lin_expr=[constraint],
+                                       senses=sense,
+                                       rhs=rhs)
+
+# Binding of bus_stop_load = bus_stop x stop_load
+for v in range(len(stops)):
+    for b in depots:
+        rhs, sense, constraint = product_constraints(
+            'bus_stopload_' + str(b) + '_' + str(v),
+            'bus_stop_' + str(b) + '_' + str(v),
+            'stopload_' + str(v),
+            len(students)
+        )
+        problem.linear_constraints.add(lin_expr=constraint,
+                                       senses=sense,
+                                       rhs=rhs)
+
+# Capacity constraint
+for b in depots:
+    rhs = [capacity]
+    sense = 'L'
+    constraint = [
+        ['bus_stopload_' + str(b) + '_' + str(v) for v in range(len(stops))],
+        [1 for v in range(len(stops))]
+    ]
+    problem.linear_constraints.add(lin_expr=[constraint],
+                                   senses=sense,
+                                   rhs=rhs)
 
 
 class NoSeparateSubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCallback):
@@ -230,6 +285,8 @@ class NoSeparateSubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCal
 
 
 problem.register_callback(NoSeparateSubToursLazyConstraintCallback)
+problem.MIP_starts.add(heuristic_sbrp(g, depots, 0),
+                       problem.MIP_starts.effort_level.auto, "heur")
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
 sol = problem.solution.get_values()

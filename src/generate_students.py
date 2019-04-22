@@ -1,12 +1,13 @@
 from random import uniform, choices, triangular, choice, sample
 from utils import dist, mann_dist
 
-STDN = 1000
-STPN = 50
-MAXW = 2
-DEPOTS = 4
+STDN = 50
+STPN = 10
+MAXW = 1
+DEPOTS = 2
+CAPACITY = 30
 
-with open('input/' + str(STDN) + '_' + str(STPN) + '.in', 'w') as f:
+with open('input/' + str(STDN) + '_' + str(STPN) + '_' + str(MAXW) + '_' + str(DEPOTS) + '_' + str(CAPACITY) + '.in', 'w') as f:
 
     stops = [(uniform(-10, 10), uniform(-10, 10)) for i in range(STPN)]
     students = []
@@ -14,7 +15,7 @@ with open('input/' + str(STDN) + '_' + str(STPN) + '.in', 'w') as f:
         st = choice(stops[1:])
         while True:
             std = (uniform(st[0] - MAXW, st[0] + MAXW),
-                uniform(st[1] - MAXW, st[1] + MAXW))
+                   uniform(st[1] - MAXW, st[1] + MAXW))
             # print(st,std)
             if dist(std, st) <= MAXW:
                 break
@@ -25,10 +26,11 @@ with open('input/' + str(STDN) + '_' + str(STPN) + '.in', 'w') as f:
     for i in range(STPN):
         for j in range(STPN):
             g[i][j] = uniform(dist(stops[i], stops[j]),
-                            dist(stops[i], stops[j]))
+                              dist(stops[i], stops[j]))
 
     f.write(str(stops) + '\n')
     f.write(str(students) + '\n')
     f.write(str(MAXW) + '\n')
     f.write(str(sample(range(1, STPN), k=DEPOTS)) + '\n')
+    f.write(str(CAPACITY) + '\n')
     f.write(str(g) + '\n')
