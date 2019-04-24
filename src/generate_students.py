@@ -1,11 +1,11 @@
 from random import uniform, choices, triangular, choice, sample
 from utils import dist, mann_dist
 
-STDN = 50
-STPN = 10
+STDN = 100
+STPN = 20
 MAXW = 1
-DEPOTS = 2
-CAPACITY = 30
+DEPOTS = 3
+CAPACITY = 35
 
 with open('input/' + str(STDN) + '_' + str(STPN) + '_' + str(MAXW) + '_' + str(DEPOTS) + '_' + str(CAPACITY) + '.in', 'w') as f:
 
