@@ -8,8 +8,13 @@ def dist(x, y):
     return ((x[0] - y[0])**2 + (x[1] - y[1])**2)**.5
 
 
-def mann_dist(x, y):
-    return fabs(x[0] - y[0]) + fabs(x[1] - y[1])
+def print_solution(p):
+    print("BEST OBJ: ", p.solution.get_objective_value())
+    sol = p.solution.get_values()
+    vnames = p.variables.get_names()
+    dsol = {vnames[i]: sol[i] for i in range(len(sol)) if sol[i] > 0.5}
+    for k, v in dsol.items():
+        print(k, v)
 
 
 def graphs(vnames, vals, depots, g):
