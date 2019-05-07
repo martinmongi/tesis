@@ -1,9 +1,10 @@
 
 import cplex
 from collections import defaultdict, deque, Counter
-from heapq import *
 from sys import argv
-from utils import dist, alternative_graphs, heuristic_sbrp, product_constraints, heuristic_alternative_2
+from utils import dist, old_product_constraints
+from heuristics import alternative_graphs, heuristic_sbrp, heuristic_alternative_2
+from pprint import pprint
 
 # INPUT
 with open(argv[1], 'r') as f:
@@ -16,6 +17,7 @@ with open(argv[1], 'r') as f:
     stp_std = {k: [v for v in range(len(students)) if k in std_stp[v]]
                for k in range(1, len(stops))}
     clusters = Counter([tuple(v) for k, v in std_stp.items()])
+    # pprint(clusters)
     stop_to_stop_cluster = {
         s: [c for c in clusters if s in c] for s in range(len(stops))}
     # print(stop_to_stop_cluster)
@@ -37,30 +39,27 @@ vnames = ['students_stop_cluster_' + str(v) + '_' + str(c)
     ["stop_" + str(v) for v in g] + \
     ["stopload_" + str(v) for v in g]
 
-
-# vtypes = [problem.variables.type.integer
-#           for v in range(len(stops)) for c in stop_to_stop_cluster[v]] + \
-#     [problem.variables.type.binary for v1 in g for v2 in g] + \
-#     [problem.variables.type.integer for v1 in g for v2 in g] + \
-#     [problem.variables.type.binary for v in g] + \
-#     [problem.variables.type.integer for v in g]
-
+vtypes = [problem.variables.type.continuous
+          for v in range(len(stops)) for c in stop_to_stop_cluster[v]] + \
+    [problem.variables.type.continuous for v1 in g for v2 in g] + \
+    [problem.variables.type.continuous for v1 in g for v2 in g] + \
+    [problem.variables.type.continuous for v in g] + \
+    [problem.variables.type.continuous for v in g]
 vtypes = [problem.variables.type.integer
           for v in range(len(stops)) for c in stop_to_stop_cluster[v]] + \
+    [problem.variables.type.binary for v1 in g for v2 in g] + \
     [problem.variables.type.integer for v1 in g for v2 in g] + \
-    [problem.variables.type.integer for v1 in g for v2 in g] + \
-    [problem.variables.type.integer for v in g] + \
+    [problem.variables.type.binary for v in g] + \
     [problem.variables.type.integer for v in g]
 
-vub = [float('inf')
-       for v in range(len(stops)) for c in stop_to_stop_cluster[v]] + \
+vub = [clusters[c] for v in range(len(stops)) for c in stop_to_stop_cluster[v]] + \
     [1 for v1 in g for v2 in g] + \
-    [float('inf') for v1 in g for v2 in g] + \
+    [capacity for v1 in g for v2 in g] + \
     [1 for v in g] + \
-    [float('inf') for v in g]
+    [capacity for v in g]
 
 vobj = [0 for v in range(len(stops)) for c in stop_to_stop_cluster[v]] + \
-    [g[v1][v2] for v1 in g for v2 in g] + \
+    [g[v1][v2][0] for v1 in g for v2 in g] + \
     [0 for v1 in g for v2 in g] + \
     [0 for v in g] + [0 for v in g]
 
@@ -86,6 +85,17 @@ constraints = [[["edge_" + str(v) + "_" + str(v2)
 problem.linear_constraints.add(lin_expr=constraints,
                                senses=sense,
                                rhs=rhs)
+
+# rhs = [0] * len(depots)
+# sense = ['G'] * len(depots)
+# constraints = [[["edge_" + str(v) + "_" + str(v2) for v2 in g if v != v2] +
+#                 ["edge_" + str(v2) + "_" + str(v) for v2 in g if v != v2],
+#                 [1 for v2 in g if v != v2] + [-1 for v2 in g if v != v2]]
+#                for v in depots]
+
+# problem.linear_constraints.add(lin_expr=constraints,
+#                                senses=sense,
+#                                rhs=rhs)
 
 # Degree of school
 rhs = [0, len(depots)]
@@ -169,7 +179,6 @@ problem.linear_constraints.add(lin_expr=constraint,
                                senses=sense,
                                rhs=rhs)
 print("STOP EDGE BINDING")
-
 # Stopload depots
 rhs = [0] * len(depots)
 sense = ['E'] * len(depots)
@@ -189,7 +198,7 @@ senses = []
 constraints = []
 for v1 in g:
     for v2 in g:
-        rhs, sense, constraint = product_constraints(
+        rhs, sense, constraint = old_product_constraints(
             'edgeload_' + str(v1) + '_' + str(v2),
             'edge_' + str(v1) + '_' + str(v2),
             'stopload_' + str(v1),
@@ -231,11 +240,10 @@ print("CAPACITY")
 
 problem.write('example.lp')
 print('WRITTEN')
-for i in range(100):
-    heur = heuristic_alternative_2(stops, students, max_walk_dist, std_stp, stp_std,
-                                   clusters, stop_to_stop_cluster, depots, capacity, g)
-    problem.MIP_starts.add(heur,
-                           problem.MIP_starts.effort_level.repair, "heur")
+# heur = heuristic_alternative_2(stops, students, max_walk_dist, std_stp, stp_std,
+#                                clusters, stop_to_stop_cluster, depots, capacity, g)
+# problem.MIP_starts.add(heur,
+#                        problem.MIP_starts.effort_level.repair, "heur")
 problem.solve()
 # problem.conflict.refine_MIP_start(0, problem.conflict.all_constraints())
 # problem.conflict.write('conflicto')
@@ -243,9 +251,11 @@ problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
 sol = problem.solution.get_values()
 # print(sol)
-dsol = {vnames[i]: sol[i] for i in range(len(sol)) if sol[i] > 0.5}
-# for k, v in dsol.items():
-#     print(k, v)
+dsol = {vnames[i]: sol[i] for i in range(len(sol))}
+for k, v in dsol.items():
+    if v > 0:
+        print(k,v)
+
 gs = alternative_graphs(vnames, sol, depots, g)
 
 with open(argv[2], 'w') as f:

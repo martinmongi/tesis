@@ -3,8 +3,8 @@ import cplex
 from collections import defaultdict, deque, Counter
 from heapq import *
 from sys import argv
-from utils import dist, alternative_graphs, heuristic_sbrp, product_constraints, heuristic_alternative
-
+from utils import dist, old_product_constraints
+from heuristics import alternative_graphs, heuristic_sbrp, heuristic_alternative
 # INPUT
 with open(argv[1], 'r') as f:
     ls = f.readlines()
@@ -170,7 +170,7 @@ for b in depots:
 # Edge loads
 for v1 in g:
     for v2 in g:
-        rhs, sense, constraint = product_constraints(
+        rhs, sense, constraint = old_product_constraints(
             'edgeload_' + str(v1) + '_' + str(v2),
             'edge_' + str(v1) + '_' + str(v2),
             'stopload_' + str(v1),
@@ -213,6 +213,7 @@ problem.MIP_starts.add(heur,
                        problem.MIP_starts.effort_level.auto, "heur")
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
+exit()
 sol = problem.solution.get_values()
 # print(sol)
 dsol = {vnames[i]: sol[i] for i in range(len(sol)) if sol[i] > 0.5}

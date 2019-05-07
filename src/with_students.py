@@ -2,7 +2,8 @@ import cplex
 from collections import defaultdict, deque, Counter
 from heapq import *
 from sys import argv
-from utils import dist, graphs, heuristic_sbrp, product_constraints
+from utils import dist, old_product_constraints
+from heuristics import graphs, heuristic_sbrp
 
 # INPUT
 with open(argv[1], 'r') as f:
@@ -206,7 +207,7 @@ for sp_i in range(len(stops)):
 # Binding of bus_stop_load = bus_stop x stop_load
 for v in range(len(stops)):
     for b in depots:
-        rhs, sense, constraint = product_constraints(
+        rhs, sense, constraint = old_product_constraints(
             'bus_stopload_' + str(b) + '_' + str(v),
             'bus_stop_' + str(b) + '_' + str(v),
             'stopload_' + str(v),
@@ -285,10 +286,11 @@ class NoSeparateSubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCal
 
 
 problem.register_callback(NoSeparateSubToursLazyConstraintCallback)
-problem.MIP_starts.add(heuristic_sbrp(g, depots, 0),
-                       problem.MIP_starts.effort_level.auto, "heur")
+# problem.MIP_starts.add(heuristic_sbrp(g, depots, 0),
+#                        problem.MIP_starts.effort_level.auto, "heur")
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
+exit()
 sol = problem.solution.get_values()
 # print(sol)
 dsol = {vnames[i]: sol[i] for i in range(len(sol)) if sol[i] > 0.5}

@@ -1,8 +1,80 @@
 from math import fabs
-from collections import defaultdict, Counter
-from random import choice
+from collections import defaultdict, Counter, deque
+from random import choice, uniform
 from itertools import combinations_with_replacement
+import matplotlib.pyplot as plt
+from heapq import heappop, heappush
+import sys
+from pprint import pprint
 
+class ProblemData:
+    def __init__(self, filename):
+        with open(filename + '.in', 'r') as f:
+            ls = f.readlines()
+            self.stops = eval(ls[0])
+            self.N = len(self.stops)
+            self.vertices = range(self.N)
+            self.edges = [
+                (i, j) for i in range(self.N) for j in range(self.N) if i != j]
+            self.students = eval(ls[1])
+            self.L = len(self.students)
+            self.max_walk_dist = eval(ls[2])
+            self.student_to_stop = {
+                k: [v for v in range(1, len(self.stops))
+                    if dist(self.stops[v],
+                            self.students[k]) <= self.max_walk_dist]
+                for k in range(len(self.students))}
+            self.stop_to_student = {
+                k: [v for v in range(len(self.students))
+                    if k in self.student_to_stop[v]]
+                for k in range(1, len(self.stops))}
+            self.clusters = Counter(
+                [tuple(v) for k, v in self.student_to_stop.items()])
+            self.stop_to_sc = {
+                s: [c for c in self.clusters if s in c]
+                for s in range(len(self.stops))}
+            self.depots = eval(ls[3])
+            self.capacity = eval(ls[4])
+            self.g = eval(ls[5])
+
+
+def distance_matrix(g, vset):
+    dist = {}
+    path = {}
+
+    for vi in vset:
+        dist[vi] = {v2: 2147483647 for v2 in g}
+        path[vi] = {v2: [] for v2 in g}
+        dist[vi][vi] = 0
+        path[vi][vi] = [vi]
+        seen = {v:False for v in g}
+        h = [(0, vi)]
+        while len(h) > 0:
+            v = heappop(h)[1]
+            if seen[v]:
+                continue
+            seen[v] = True
+            for v2 in g[v]:
+                nd = dist[vi][v] + g[v][v2][0]
+                if nd < dist[vi][v2]:
+                    path[vi][v2] = path[vi][v] + g[v][v2][1]
+                    dist[vi][v2] = nd
+                    heappush(h, (dist[vi][v2], v2))
+        dist[vi] = {v: dist[vi][v] for v in dist[vi] if v in vset}
+        path[vi] = {v: path[vi][v] for v in path[vi] if v in vset}
+    return dist, path
+
+def generate_students(n, stops, max_w):
+    students = []
+    for _ in range(n):
+        st = choice(stops[1:])
+        while True:
+            std = (uniform(st[0] - max_w, st[0] + max_w),
+                   uniform(st[1] - max_w, st[1] + max_w))
+            if dist(std, st) <= max_w:
+                break
+        students.append(std)
+    return students
 
 def dist(x, y):
     return ((x[0] - y[0])**2 + (x[1] - y[1])**2)**.5
@@ -16,162 +88,39 @@ def print_solution(p):
     for k, v in dsol.items():
         print(k, v)
 
-
-def graphs(vnames, vals, depots, g):
-    res = []
-    dsol = {vnames[i]: vals[i] for i in range(len(vals))}
-    for bn in depots:
-        res.append(defaultdict(lambda: []))
-        for v1 in g:
-            for v2 in g[v1]:
-                if dsol["bus_edge_" + str(bn) + "_" + str(v1) + "_" + str(v2)] > 0.5:
-                    res[-1][v1].append(v2)
-    return res
-
-
-def alternative_graphs(vnames, vals, depots, g):
+def process_solution(p):
     res = defaultdict(lambda: [])
+    vnames = p.variables.get_names()
+    vals = p.solution.get_values()
     dsol = {vnames[i]: vals[i] for i in range(len(vals))}
-    for v1 in g:
-        for v2 in g[v1]:
-            if dsol["edge_" + str(v1) + "_" + str(v2)] > 0.5:
-                res[v1].append(v2)
+    for k,v in dsol.items():
+        ks = k.split('_')
+        if ks[0] == 'Edge' and v > 0.5:
+            res[int(ks[1])].append(int(ks[2]))
     return res
 
+def write_solution(p, filename):
+    res = process_solution(p)
+    with open(filename + '.out', 'w') as f:
+        f.write(str(dict(res)) + '\n')
 
-def heuristic_sbrp(g, bs, sp):
-    paths = [[b] for b in bs]
-    not_seen = set([v for v in g if v not in bs + [sp]])
-    while len(not_seen) > 0:
-        min_dist = float('inf')
-        for path in paths:
-            for v in not_seen:
-                if g[path[-1]][v] < min_dist:
-                    min_dist = g[path[-1]][v]
-                    min_dist_pair = (path[-1], v)
-        for path in paths:
-            if min_dist_pair[0] == path[-1]:
-                path.append(min_dist_pair[1])
-                not_seen.remove(min_dist_pair[1])
-    print(paths)
-
-    onvars = []
-
-    for path in paths:
-        for i in range(len(path) - 1):
-            onvars.append(
-                "bus_edge_" + str(path[0]) + "_" + str(path[i]) + "_" + str(path[i + 1]))
-        onvars.append(
-            "bus_edge_" + str(path[0]) + "_" + str(path[-1]) + "_" + str(sp))
-
-    varsnames = ["bus_edge_" + str(bn) + "_" + str(v1) + "_" + str(v2)
-                 for bn in bs for v1 in g for v2 in g]
-    varsvals = [1 if varsnames[i]
-                in onvars else 0 for i in range(len(varsnames))]
-
-    return [varsnames, varsvals]
-
-
-def heuristic_alternative(stops, students, maxw, std_stp,
-                          stp_std, depots, capacity, g):
-
-    student_stop_res = {i: choice(std_stp[i]) for i in range(len(students))}
-    # print(student_stop_res)
-    stops_load_res = {v: len([y for x, y in student_stop_res.items(
-    ) if y == v]) for k, v in student_stop_res.items()}
-
-    paths = [[b] for b in depots]
-    path_loads = [stops_load_res[b] for b in depots]
-    not_seen = set([v for v in stops_load_res if v not in depots])
-    while len(not_seen) > 0:
-        min_dist = float('inf')
-        for path_i in range(len(paths)):
-            for v in not_seen:
-                if g[paths[path_i][-1]][v] < min_dist and path_loads[path_i] + stops_load_res[v] <= capacity:
-                    min_dist = g[paths[path_i][-1]][v]
-                    min_dist_pair = (paths[path_i][-1], v)
-        for path_i in range(len(paths)):
-            if min_dist_pair[0] == paths[path_i][-1]:
-                path_loads[path_i] += stops_load_res[min_dist_pair[1]]
-                paths[path_i].append(min_dist_pair[1])
-                not_seen.remove(min_dist_pair[1])
-    print(paths)
-
-    onvars = ["student_stop_" + str(i) + '_' + str(student_stop_res[i])
-              for i in range(len(students))]
-
-    for path in paths:
-        for i in range(len(path) - 1):
-            onvars.append(
-                "edge_" + str(path[i]) + "_" + str(path[i + 1]))
-        onvars.append(
-            "edge_" + str(path[-1]) + "_" + str(0))
-
-    varsnames = ["student_stop_" + str(i) + '_' + str(st)
-                 for i in range(len(students)) for st in std_stp[i]] + \
-        ["edge_" + str(v1) + "_" + str(v2)
-         for v1 in g for v2 in g]
-    varsvals = [1 if varsnames[i]
-                in onvars else 0 for i in range(len(varsnames))]
-
-    # print(onvars)
-    return [varsnames, varsvals]
-
-
-def heuristic_alternative_2(stops, students, max_walk_dist, std_stp, stp_std,
-                            clusters, stop_to_stop_cluster, depots, capacity, g):
-
-    stop_load = {k: 0 for k in g}
-    varsnames = []
-    varsvals = []
-
-    # print(stop_to_stop_cluster)
-    # print(clusters)
-    vars = {'students_stop_cluster_' +
-            str(v) + '_' + str(c): 0 for v in g for c in stop_to_stop_cluster[v]}
-    # vars.update({'stopload_' + str(v):0 for v in g})
-    for c in clusters:
-        distribution = Counter([choice(c) for i in range(clusters[c])])
-        for v, k in distribution.items():
-            stop_load[v] += k
-            # vars['stopload_' + str(v)] += k
-            vars['students_stop_cluster_' + str(v) + '_' + str(c)] += k
-
-
-    paths = [[b] for b in depots]
-    path_loads = [stop_load[b] for b in depots]
-    not_seen = set([v for v in stop_load if v not in depots + [0]])
-    while len(not_seen) > 0:
-        # print(paths)
-        min_dist = float('inf')
-        for path_i in range(len(paths)):
-            for v in not_seen:
-                if g[paths[path_i][-1]][v] < min_dist and path_loads[path_i] + stop_load[v] <= capacity:
-                    min_dist = g[paths[path_i][-1]][v]
-                    min_dist_pair = (paths[path_i][-1], v)
-        for path_i in range(len(paths)):
-            if min_dist_pair[0] == paths[path_i][-1]:
-                path_loads[path_i] += stop_load[min_dist_pair[1]]
-                paths[path_i].append(min_dist_pair[1])
-                not_seen.remove(min_dist_pair[1])
-    paths = [p + [0] for p in paths]
-    # print(paths)
-    # print(path_loads)
-    # print(not_seen)
-
-    vars.update({'edge_' + str(v) + '_' + str(v2) : 0 for v in g for v2 in g})
-    for path in paths:
-        for i in range(1, len(path)):
-            vars['edge_' + str(path[i-1]) + '_' + str(path[i])] = 1
-        
-    # for v in vars:
-    #     if vars[v] > 0.5:
-    #         print(v, vars[v])
+def plot_solution(data, p,filename = None):
+    res = process_solution(p)
+    plt.plot([data.stops[0][0]], [data.stops[0][1]], 'gs')
+    plt.plot([data.stops[dep][0] for dep in data.depots],
+            [data.stops[dep][1] for dep in data.depots], 'y^')
+    plt.plot([data.stops[i][0] for i in range(1,len(data.stops)) if i not in data.depots],
+            [data.stops[i][1] for i in range(1,len(data.stops)) if i not in data.depots], 'ro')
+    plt.plot([s[0] for s in data.students], [s[1] for s in data.students], 'bx')
     
-    return [[k for k,v in vars.items()], [v for k,v in vars.items()]]
+    res = process_solution(p)
+    for v in res:
+        for v2 in res[v]:
+            plt.plot([data.stops[v][0], data.stops[v2][0]],
+                     [data.stops[v][1], data.stops[v2][1]], 'b-')
+    plt.show()
 
-
-def product_constraints(res_vn, b_vn, n_vn, n_ub):
+def old_product_constraints(res_vn, b_vn, n_vn, n_ub):
     rhs = [0, 0, -n_ub]
     sense = ['L', 'L', 'G']
     constraints = [
@@ -180,3 +129,40 @@ def product_constraints(res_vn, b_vn, n_vn, n_ub):
         [[res_vn, n_vn, b_vn], [1, -1, -n_ub]]
     ]
     return (rhs, sense, constraints)
+
+
+def kosaraju(graph):
+    def visit(v):
+        if not visited[v]:
+            visited[v] = True
+            for v2 in graph[v]:
+                visit(v2)
+            L.appendleft(v)
+    
+    def assign(v,root):
+        if not assignment[v]:
+            assignment[v] = root
+            for v2 in tgraph[v]:
+                assign(v2,root)
+
+
+    tgraph = {v: [v2 for v2 in graph if v in graph[v2]] for v in graph}
+
+    visited = {v:False for v in graph}
+    assignment = {v:None for v in graph}
+    L = deque([])
+    for v in graph:
+        visit(v)
+    
+    for v in L:
+        assign(v,v)
+    
+    return assignment
+
+
+def transpose(g):
+    res = defaultdict(lambda:{})
+    for v in g:
+        for v2 in g[v]:
+            res[v2][v] = g[v][v2]
+    return res
