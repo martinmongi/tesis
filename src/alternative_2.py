@@ -39,18 +39,12 @@ vnames = ['students_stop_cluster_' + str(v) + '_' + str(c)
     ["stop_" + str(v) for v in g] + \
     ["stopload_" + str(v) for v in g]
 
-vtypes = [problem.variables.type.continuous
-          for v in range(len(stops)) for c in stop_to_stop_cluster[v]] + \
-    [problem.variables.type.continuous for v1 in g for v2 in g] + \
-    [problem.variables.type.continuous for v1 in g for v2 in g] + \
-    [problem.variables.type.continuous for v in g] + \
-    [problem.variables.type.continuous for v in g]
 vtypes = [problem.variables.type.integer
           for v in range(len(stops)) for c in stop_to_stop_cluster[v]] + \
     [problem.variables.type.binary for v1 in g for v2 in g] + \
-    [problem.variables.type.integer for v1 in g for v2 in g] + \
+    [problem.variables.type.continuous for v1 in g for v2 in g] + \
     [problem.variables.type.binary for v in g] + \
-    [problem.variables.type.integer for v in g]
+    [problem.variables.type.continuous for v in g]
 
 vub = [clusters[c] for v in range(len(stops)) for c in stop_to_stop_cluster[v]] + \
     [1 for v1 in g for v2 in g] + \

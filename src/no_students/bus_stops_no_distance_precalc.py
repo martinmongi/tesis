@@ -4,12 +4,7 @@ import cplex
 from collections import defaultdict, deque
 
 
-def reverse_graph(g):
-    rg = defaultdict(lambda: {})
-    for v in g:
-        for v2 in g[v]:
-            rg[v2][v] = g[v][v2]
-    return rg
+
 
 
 # INPUT

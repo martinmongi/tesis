@@ -14,6 +14,7 @@ streets = streets[['WKT', 'nomoficial', 'alt_izqini', 'alt_izqfin', \
                    'BARRIO_PAR', 'BARRIO_IMP']]
 
 barrio_str = argv[2]
+barrio_str = "SAN TELMO"
 barrio = streets[(streets.BARRIO == barrio_str) |
                  (streets.BARRIO_PAR == barrio_str) |
                  (streets.BARRIO_IMP == barrio_str)]
@@ -45,6 +46,7 @@ graph.update(add)
 
 assignment = kosaraju(graph)
 c = Counter([v for k, v in assignment.items()])
+print(c)
 mc = c.most_common(1)[0][0]
 deadends = [v for v in graph if assignment[v] != mc]
 
