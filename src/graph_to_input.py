@@ -4,16 +4,16 @@ from random import sample
 from pprint import pprint
 from collections import Counter
 
-N = 100
+N = 50
 L = 200
 MAXW = 0.002
-DEPOTS = 4
-CAPACITY = 52
+DEPOTS = 2
+CAPACITY = 100
 
 with open(argv[1], 'r') as f:
     g = eval(f.readline())
 
-vset = sample(list(g), k=len(g)-1)
+vset = sample(list(g), k=N)
 students = generate_students(L,vset,MAXW)
 depots = sample(vset[1:], k=DEPOTS)
 

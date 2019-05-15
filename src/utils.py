@@ -28,7 +28,10 @@ class ProblemData:
                 self.original_graph, self.stops)
 
     def v_index(self, v):
-        return self.vdict[v]
+        if v not in self.vdict:
+            print("IMBECIL PEDISTE EL INDEX DE", v)
+        else:
+            return self.vdict[v]
     
     def s_index(self,s):
         return self.sdict[s]
@@ -85,23 +88,19 @@ def distance_matrix(g, vset):
     dist = {}
     path = {}
     for vi in vset:
-        dist[vi] = {v2: 2147483647 for v2 in g}
-        path[vi] = {v2: [] for v2 in g}
-        dist[vi][vi] = 0
-        path[vi][vi] = [vi]
+        dist[vi] = {}
+        path[vi] = {}
         seen = {v: False for v in g}
-        h = [(0, vi)]
+        h = [(0.0, vi, [vi])]
         while len(h) > 0:
-            v = heappop(h)[1]
-            if seen[v]:
+            v = heappop(h)
+            if seen[v[1]]:
                 continue
-            seen[v] = True
-            for v2 in g[v]:
-                nd = dist[vi][v] + g[v][v2][0]
-                if nd < dist[vi][v2]:
-                    path[vi][v2] = path[vi][v] + g[v][v2][1]
-                    dist[vi][v2] = nd
-                    heappush(h, (dist[vi][v2], v2))
+            seen[v[1]] = True
+            dist[vi][v[1]] = v[0]
+            path[vi][v[1]] = v[2]
+            for v2 in g[v[1]]:
+                heappush(h, (v[0] + g[v[1]][v2][0],v2, v[2] + [v2]))
         dist[vi] = {v: dist[vi][v] for v in dist[vi] if v in vset}
         path[vi] = {v: path[vi][v] for v in path[vi] if v in vset}
     return dist, path

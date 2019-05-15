@@ -96,7 +96,7 @@ constraints = [
     for v in g if v != 0]
 
 constraints += [
-    [["edge_" + str(v) + "_" + str(v2) for v2 in g],
+    [["edge_" + str(v2) + "_" + str(v) for v2 in g],
      [1 for v2 in g]]
     for v in g if v != 0]
 

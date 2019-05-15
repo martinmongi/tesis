@@ -10,14 +10,15 @@ from utils import (ProblemData, bfs, dist, old_product_constraints, transpose,
 
 # INPUT
 data = ProblemData(argv[1])
+# pprint(data.distance)
+# exit()
 
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
 
 vnames = [vn('RouteEdge', data.v_index(v0), data.v_index(v1), data.v_index(v2))
-          for v0 in data.depots
-          for v1 in data.original_graph
-          for v2 in data.original_graph[v1]] + \
+          for v0 in data.depots for v1 in data.stops
+          for v2 in data.stops if v1 != v2] + \
          [vn('RouteStop', data.v_index(v0), data.v_index(v1))
           for v0 in data.depots
           for v1 in data.stops[1:]] + \
@@ -28,10 +29,9 @@ vnames = [vn('RouteEdge', data.v_index(v0), data.v_index(v1), data.v_index(v2))
          [vn('RouteActive', data.v_index(v0))
           for v0 in data.depots]
 
-vtypes = ['I'
-          for v0 in data.depots
-          for v1 in data.original_graph
-          for v2 in data.original_graph[v1]] + \
+vtypes = ['B'
+          for v0 in data.depots for v1 in data.stops
+          for v2 in data.stops if v1 != v2] + \
          ['B'
           for v0 in data.depots
           for v1 in data.stops[1:]] + \
@@ -42,10 +42,9 @@ vtypes = ['I'
          ['B'
           for v0 in data.depots]
 
-vobj = [data.original_graph[v1][v2][0]
-        for v0 in data.depots
-        for v1 in data.original_graph
-        for v2 in data.original_graph[v1]] + \
+vobj = [data.distance[v1][v2]
+        for v0 in data.depots for v1 in data.stops
+        for v2 in data.stops if v1 != v2] + \
        [0
         for v0 in data.depots
         for v1 in data.stops[1:]] + \
@@ -60,18 +59,18 @@ problem.variables.add(obj=vobj, types=vtypes, names=vnames)
 
 # All vertices have equal in and out degree, other than depots on their own tour
 # or school in all depots
-rhs = [0 for v0 in data.depots for v in data.original_graph
+rhs = [0 for v0 in data.depots for v in data.stops
        if v not in [data.school, v0]]
-sense = ['E' for v0 in data.depots for v in data.original_graph
+sense = ['E' for v0 in data.depots for v in data.stops
          if v not in [data.school, v0]]
 constraint = [[
     [vn('RouteEdge', data.v_index(v0), data.v_index(v), data.v_index(v2))
-     for v2 in data.original_graph[v]] +
+     for v2 in data.stops if v != v2] +
     [vn('RouteEdge', data.v_index(v0), data.v_index(v2), data.v_index(v))
-     for v2 in data.reverse_original_graph[v]],
-    [1 for v2 in data.original_graph[v]] +
-    [-1 for v2 in data.reverse_original_graph[v]]
-] for v0 in data.depots for v in data.original_graph if v not in [data.school, v0]]
+     for v2 in data.stops if v != v2],
+    [1 for v2 in data.stops if v != v2] +
+    [-1 for v2 in data.stops if v != v2]
+] for v0 in data.depots for v in data.stops if v not in [data.school, v0]]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
 # outdeg - indeg = routeactive
@@ -80,12 +79,12 @@ rhs = [0] * len(data.depots)
 sense = ['E'] * len(data.depots)
 constraint = [[
     [vn('RouteEdge', data.v_index(v0), data.v_index(v0), data.v_index(v2))
-     for v2 in data.original_graph[v0]] +
+     for v2 in data.stops if v2 != v0] +
     [vn('RouteEdge', data.v_index(v0), data.v_index(v2), data.v_index(v0))
-     for v2 in data.reverse_original_graph[v0]] +
+     for v2 in data.stops if v2 != v0] +
     [vn('RouteActive', data.v_index(v0))],
-    [1 for v2 in data.original_graph[v0]] +
-    [-1 for v2 in data.reverse_original_graph[v0]] +
+    [1 for v2 in data.stops if v2 != v0] +
+    [-1 for v2 in data.stops if v2 != v0] +
     [-1]
 ] for v0 in data.depots]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
@@ -96,36 +95,35 @@ rhs = [0] * len(data.depots)
 sense = ['E'] * len(data.depots)
 constraint = [[
     [vn('RouteEdge', data.v_index(v0), data.v_index(data.school), data.v_index(v2))
-     for v2 in data.original_graph[data.school]] +
+     for v2 in data.stops if v2 != data.school] +
     [vn('RouteEdge', data.v_index(v0), data.v_index(v2), data.v_index(data.school))
-     for v2 in data.reverse_original_graph[data.school]] +
+     for v2 in data.stops if v2 != data.school] +
     [vn('RouteActive', data.v_index(v0))],
-    [1 for v2 in data.original_graph[data.school]] +
-    [-1 for v2 in data.reverse_original_graph[data.school]] +
+    [1 for v2 in data.stops if v2 != data.school] +
+    [-1 for v2 in data.stops if v2 != data.school] +
     [1]
 ] for v0 in data.depots]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
-
 
 # Having out degree means vertex in stops can have stop
 rhs = [0 for v0 in data.depots for v in data.stops[1:]]
 sense = ['G' for v0 in data.depots for v in data.stops[1:]]
 constraint = [[
     [vn('RouteEdge', data.v_index(v0), data.v_index(v), data.v_index(v2))
-     for v2 in data.original_graph[v]] +
+     for v2 in data.stops if v2 != v] +
     [vn('RouteStop', data.v_index(v0), data.v_index(v))],
-    [1 for v2 in data.original_graph[v]] + [-1]
+    [1 for v2 in data.stops if v2 != v] + [-1]
 ] for v0 in data.depots for v in data.stops[1:]]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-# # All stops can be visited at most one time
-# rhs = [1 for v in data.stops[1:]]
-# sense = ['L' for v in data.stops[1:]]
-# constraint = [[
-#     [vn('RouteStop', data.v_index(v0), data.v_index(v)) for v0 in data.depots],
-#     [1 for v0 in data.depots]
-# ] for v in data.stops[1:]]
-# problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+# All stops can be visited at most one time
+rhs = [1 for v in data.stops[1:]]
+sense = ['L' for v in data.stops[1:]]
+constraint = [[
+    [vn('RouteStop', data.v_index(v0), data.v_index(v)) for v0 in data.depots],
+    [1 for v0 in data.depots]
+] for v in data.stops[1:]]
+problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
 # Stop choices for each student add to 1
 rhs = [1 for s in data.students]
@@ -186,19 +184,13 @@ class SubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCallback):
             while len(loops) > 0:
                 loop = bfs(g, loops.pop())
                 for v00 in data.depots:
-                    rhs = 1
-                    sense = 'G'
+                    rhs = len(loop) - 1
+                    sense = 'L'
                     constraint = [
-                        [vn('RouteEdge', data.v_index(v00), v1, data.v_index(v2))
-                         for v1 in loop
-                         for v2 in data.original_graph[data.vdictinv[v1]]
-                         if data.v_index(v2) not in loop],
-                        [1
-                         for v1 in loop
-                         for v2 in data.original_graph[data.vdictinv[v1]]
-                         if data.v_index(v2) not in loop]
+                        [vn('RouteEdge', data.v_index(v00), v1, v2)
+                         for v1 in loop for v2 in loop if v1 != v2],
+                        [1 for v1 in loop for v2 in loop if v1 != v2]
                     ]
-                    # pprint(constraint)
                     self.add(constraint=constraint,
                              sense=sense,
                              rhs=rhs)
@@ -209,7 +201,6 @@ problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
 sol = problem.solution.get_values()
 dsol = {vnames[i]: sol[i] for i in range(len(sol)) if sol[i] > 0.5}
-pprint(dsol)
 
 gs = {v0: defaultdict(lambda: {}) for v0 in data.depots}
 assignment = {}
@@ -218,7 +209,7 @@ for vname in dsol:
     if sp[0] == 'RouteEdge':
         v0, i, j = map(int, sp[1:])
         gs[data.vdictinv[v0]][data.vdictinv[i]][data.vdictinv[j]
-                                                ] = data.original_graph[data.vdictinv[i]][data.vdictinv[j]][1]
+                                                ] = data.path[data.vdictinv[i]][data.vdictinv[j]]
     elif sp[0] == 'RouteStopStudent':
         v0, s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]
