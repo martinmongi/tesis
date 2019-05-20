@@ -14,7 +14,6 @@ streets = streets[['WKT', 'nomoficial', 'alt_izqini', 'alt_izqfin', \
                    'BARRIO_PAR', 'BARRIO_IMP']]
 
 barrio_str = argv[2]
-barrio_str = "SAN TELMO"
 barrio = streets[(streets.BARRIO == barrio_str) |
                  (streets.BARRIO_PAR == barrio_str) |
                  (streets.BARRIO_IMP == barrio_str)]

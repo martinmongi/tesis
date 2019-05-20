@@ -13,14 +13,24 @@ if len(argv) > 1:
             for v2 in g[v]:
                 path = g[v][v2][1]
                 plt.plot([p[0] * 1000 for p in path],
-                         [p[1] * 1000 for p in path], '-', color='0.75')
+                        [p[1] * 1000 for p in path], '-', color='0.8')
                 plt.arrow(path[-2][0] * 1000,
-                          path[-2][1] * 1000,
-                          (path[-1][0] - path[-2][0]) * 1000 / 2,
-                          (path[-1][1] - path[-2][1]) * 1000 / 2, head_width=0.2, head_length=.2, color='0.75')
+                        path[-2][1] * 1000,
+                        (path[-1][0] - path[-2][0]) * 1000 / 2,
+                        (path[-1][1] - path[-2][1]) * 1000 / 2, head_width=0.2, head_length=.2, color='0.8')
+        
 
 if len(argv) > 2:
     data = ProblemData(argv[2])
+    for v in data.original_graph:
+        for v2 in data.original_graph[v]:
+            path = data.original_graph[v][v2][1]
+            plt.plot([p[0] * 1000 for p in path],
+                        [p[1] * 1000 for p in path], '-', color='0.6')
+            plt.arrow(path[-2][0] * 1000,
+                        path[-2][1] * 1000,
+                        (path[-1][0] - path[-2][0]) * 1000 / 2,
+                        (path[-1][1] - path[-2][1]) * 1000 / 2, head_width=0.2, head_length=.2, color='0.6')
     plt.plot([data.stops[0][0] * 1000],
              [data.stops[0][1] * 1000], 'gh', markersize=20)
     plt.plot([dep[0] * 1000 for dep in data.depots],
@@ -37,8 +47,8 @@ if len(argv) > 3:
             g = eval(ls[i])
             for v1 in g:
                 for v2 in g[v1]:
-                    plt.plot([p[0] * 1000 + i * 0.1 for p in g[v1][v2]],
-                             [p[1] * 1000 + i * 0.1 for p in g[v1][v2]],
+                    plt.plot([p[0] * 1000 + (i-(len(ls)-1)//2) * 0.1 for p in g[v1][v2]],
+                             [p[1] * 1000 + (i-(len(ls)-1)//2) * 0.1 for p in g[v1][v2]],
                              color=COLORS[i % len(COLORS)])
         # assignment = eval(ls[-1])
         # # for st, s in assignment.items():

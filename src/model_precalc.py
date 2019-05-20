@@ -2,16 +2,23 @@ import re
 from collections import Counter, defaultdict, deque
 from pprint import pprint
 from sys import argv
+from optparse import OptionParser
 
 import cplex
 
 from utils import (ProblemData, bfs, dist, old_product_constraints, transpose,
                    vn)
 
+parser = OptionParser()
+parser.add_option("--if", dest="in_file")
+parser.add_option("--of", dest="out_file")
+parser.add_option("--mtz", dest="mtz", action="store_true")
+parser.add_option("--dfj", dest="mtz", action="store_false")
+(options, args) = parser.parse_args()
+
+print(options.mtz)
 # INPUT
-data = ProblemData(argv[1])
-# pprint(data.distance)
-# exit()
+data = ProblemData(options.in_file)
 
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
@@ -42,19 +49,33 @@ vtypes = ['B'
          ['B'
           for v0 in data.depots]
 
-vobj = [data.distance[v1][v2]
+vobj = [data.dist[v1][v2]
         for v0 in data.depots for v1 in data.stops
         for v2 in data.stops if v1 != v2] + \
        [0
         for v0 in data.depots
         for v1 in data.stops[1:]] + \
-       [0  # dist(s,v1)
+       [0
         for s in data.students
         for v0 in data.depots
         for v1 in data.student_to_stop[s]] + \
        [0
         for v0 in data.depots]
 
+if options.mtz:
+    vnames += [vn('Rank', data.v_index(v0), data.v_index(v))
+               for v0 in data.depots
+               for v in data.stops]
+    vtypes += ['C'
+               for v0 in data.depots
+               for v in data.stops]
+    vobj += [0
+             for v0 in data.depots
+             for v in data.stops]
+
+
+# print(list(map(len, [vobj, vtypes, vnames])))
+# exit()
 problem.variables.add(obj=vobj, types=vtypes, names=vnames)
 
 # All vertices have equal in and out degree, other than depots on their own tour
@@ -71,6 +92,16 @@ constraint = [[
     [1 for v2 in data.stops if v != v2] +
     [-1 for v2 in data.stops if v != v2]
 ] for v0 in data.depots for v in data.stops if v not in [data.school, v0]]
+problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+
+# All outdegs constrained by 1
+rhs = [1 for v in data.stops]
+sense = ['L' for v in data.stops]
+constraint = [[
+    [vn('RouteEdge', data.v_index(v0), data.v_index(v), data.v_index(v2))
+     for v0 in data.depots for v2 in data.stops if v != v2],
+    [1 for v0 in data.depots for v2 in data.stops if v != v2]
+] for v in data.stops]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
 # outdeg - indeg = routeactive
@@ -165,38 +196,64 @@ constraint = [[
 ] for v0 in data.depots]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
+if options.mtz:
+    for v0 in data.depots:
+        #Depots have rank 1
+        rhs = [1]
+        sense = ['E']
+        constraint = [[[vn('Rank', data.v_index(v0), data.v_index(v0))], [1]]]
+        problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                                       names=[vn('irank', data.v_index(v0))])
 
-class SubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCallback):
+        # Routes keep rank
+        M = len(data.stops)
+        gen = [(i, j) for i in data.stops for j in data.stops
+               if i != j and i != v0 and j != data.school]
+        rhs = [1 - M for i, j in gen]
+        sense = ['G' for i, j in gen]
+        constraint = [[
+            [vn('Rank', data.v_index(v0), data.v_index(j)),
+             vn('Rank', data.v_index(v0), data.v_index(i)),
+             vn('RouteEdge', data.v_index(v0), data.v_index(i), data.v_index(j))],
+            [1, -1, -M]
+        ] for i, j in gen]
+        problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                                       names=[vn('crank', data.v_index(v0),
+                                                 data.v_index(i), data.v_index(j)) for i, j in gen])
+else:
+    class SubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCallback):
+        def __call__(self):
+            sols = self.get_values()
+            dsol = {vnames[i]: sols[i]
+                    for i in range(len(sols)) if sols[i] > 0.5}
+            gs = {data.v_index(v0): defaultdict(lambda: [])
+                  for v0 in data.depots}
+            for vname in dsol:
+                sp = vname.split("_")
+                if sp[0] == 'RouteEdge':
+                    v0, i, j = map(int, sp[1:])
+                    gs[v0][i].append(j)
 
-    def __call__(self):
-        sols = self.get_values()
-        dsol = {vnames[i]: sols[i] for i in range(len(sols)) if sols[i] > 0.5}
-        gs = {data.v_index(v0): defaultdict(lambda: []) for v0 in data.depots}
-        for vname in dsol:
-            sp = vname.split("_")
-            if sp[0] == 'RouteEdge':
-                v0, i, j = map(int, sp[1:])
-                gs[v0][i].append(j)
+            for v0, g in gs.items():
+                main_tour = bfs(g, v0)
+                loops = set([v for v in g]).difference(main_tour)
+                while len(loops) > 0:
+                    loop = bfs(g, loops.pop())
+                    for v00 in data.depots:
+                        rhs = len(loop) - 1
+                        sense = 'L'
+                        constraint = [
+                            [vn('RouteEdge', data.v_index(v00), v1, v2)
+                             for v1 in loop for v2 in loop if v1 != v2],
+                            [1 for v1 in loop for v2 in loop if v1 != v2]
+                        ]
+                        self.add(constraint=constraint,
+                                 sense=sense,
+                                 rhs=rhs)
+                    loops.difference_update(loop)
+    problem.register_callback(SubToursLazyConstraintCallback)
 
-        for v0, g in gs.items():
-            main_tour = bfs(g, v0)
-            loops = set([v for v in g]).difference(main_tour)
-            while len(loops) > 0:
-                loop = bfs(g, loops.pop())
-                for v00 in data.depots:
-                    rhs = len(loop) - 1
-                    sense = 'L'
-                    constraint = [
-                        [vn('RouteEdge', data.v_index(v00), v1, v2)
-                         for v1 in loop for v2 in loop if v1 != v2],
-                        [1 for v1 in loop for v2 in loop if v1 != v2]
-                    ]
-                    self.add(constraint=constraint,
-                             sense=sense,
-                             rhs=rhs)
-                loops.difference_update(loop)
 
-problem.register_callback(SubToursLazyConstraintCallback)
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
 sol = problem.solution.get_values()
@@ -215,5 +272,4 @@ for vname in dsol:
         assignment[data.students[st]] = data.vdictinv[s]
 
 data.add_solution(assignment, gs)
-if len(argv) > 2:
-    data.write_solution(argv[2])
+data.write_solution(options.out_file)

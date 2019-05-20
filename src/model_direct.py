@@ -58,6 +58,22 @@ vobj = [data.original_graph[v1][v2][0]
 
 problem.variables.add(obj=vobj, types=vtypes, names=vnames)
 
+# Upper bound on edges
+rhs = [data.edge_max_flow[v1, v2]
+       for v1 in data.original_graph
+       for v2 in data.original_graph[v1]]
+sense = ['L' for v1 in data.original_graph for v2 in data.original_graph[v1]]
+constraint = [[
+    [vn('RouteEdge', data.v_index(v0), data.v_index(v1), data.v_index(v2))
+     for v0 in data.depots],
+    [1 for v0 in data.depots]
+] for v1 in data.original_graph for v2 in data.original_graph[v1]]
+problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                               names=[vn('BoundOnEdge', data.v_index(v1),
+                                         data.v_index(v2))
+                                      for v1 in data.original_graph
+                                      for v2 in data.original_graph[v1]])
+
 # All vertices have equal in and out degree, other than depots on their own tour
 # or school in all depots
 rhs = [0 for v0 in data.depots for v in data.original_graph
@@ -72,7 +88,11 @@ constraint = [[
     [1 for v2 in data.original_graph[v]] +
     [-1 for v2 in data.reverse_original_graph[v]]
 ] for v0 in data.depots for v in data.original_graph if v not in [data.school, v0]]
-problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                               names=[vn('RouteInOutBalance', data.v_index(v0),
+                                         data.v_index(v)) for v0 in data.depots
+                                      for v in data.original_graph
+                                      if v not in [data.school, v0]])
 
 # outdeg - indeg = routeactive
 # All depots have 0 <= outdeg - indeg <= 1 in their own tours (constrainted by binarity of routeactive)
@@ -88,7 +108,9 @@ constraint = [[
     [-1 for v2 in data.reverse_original_graph[v0]] +
     [-1]
 ] for v0 in data.depots]
-problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                               names=[vn('RouteActiveDepots', data.v_index(v0))
+                                      for v0 in data.depots])
 
 # outdeg - indeg = - routeactive
 # School has -1 <= outdeg - indeg <= 0 for all tours (constrained by binarity of routeactive)
@@ -104,7 +126,9 @@ constraint = [[
     [-1 for v2 in data.reverse_original_graph[data.school]] +
     [1]
 ] for v0 in data.depots]
-problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                               names=[vn('RouteActiveSchool', data.v_index(v0))
+                                      for v0 in data.depots])
 
 
 # Having out degree means vertex in stops can have stop
@@ -116,7 +140,9 @@ constraint = [[
     [vn('RouteStop', data.v_index(v0), data.v_index(v))],
     [1 for v2 in data.original_graph[v]] + [-1]
 ] for v0 in data.depots for v in data.stops[1:]]
-problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                               names=[vn('EdgeStopBinding', data.v_index(v0), data.v_index(v))
+                                      for v0 in data.depots for v in data.stops[1:]])
 
 # All stops can be visited at most one time
 rhs = [1 for v in data.stops[1:]]
@@ -125,7 +151,9 @@ constraint = [[
     [vn('RouteStop', data.v_index(v0), data.v_index(v)) for v0 in data.depots],
     [1 for v0 in data.depots]
 ] for v in data.stops[1:]]
-problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                               names=[vn('RouteStopSum', data.v_index(v))
+                                      for v in data.stops[1:]])
 
 # Stop choices for each student add to 1
 rhs = [1 for s in data.students]
@@ -135,7 +163,8 @@ constraint = [[
      for v0 in data.depots for v1 in data.student_to_stop[s]],
     [1 for v0 in data.depots for v1 in data.student_to_stop[s]],
 ] for s in data.students]
-problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                               names=[vn('StudentStopSum', data.s_index(s))for s in data.students])
 
 # If student chooses stop, it must be in a tour
 rhs = [0 for s in data.students for v0 in data.depots for v in data.student_to_stop[s]]
@@ -219,16 +248,36 @@ sol = problem.solution.get_values()
 dsol = {vnames[i]: sol[i] for i in range(len(sol)) if sol[i] > 0.5}
 
 gs = {v0: defaultdict(lambda: {}) for v0 in data.depots}
+
+# loads = defaultdict(lambda: 0)
+
 assignment = {}
 for vname in dsol:
     sp = vname.split("_")
     if sp[0] == 'RouteEdge':
         v0, i, j = map(int, sp[1:])
+        # print(vname, '\t', dsol[vname], '\t', min(
+        #     len(set([v for v, _ in data.direct_edge_dict[(
+        #         data.vdictinv[i], data.vdictinv[j])]])),
+        #     len(set([v for _, v in data.direct_edge_dict[data.vdictinv[i], data.vdictinv[j]]]))))
+        # loads[i, j] += dsol[vname]
         gs[data.vdictinv[v0]][data.vdictinv[i]][data.vdictinv[j]
                                                 ] = data.original_graph[data.vdictinv[i]][data.vdictinv[j]][1]
     elif sp[0] == 'RouteStopStudent':
         v0, s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]
+
+# for k, v in loads.items():
+#     v1, v2 = k
+#     ori = set([i for i, j in data.direct_edge_dict[(
+#         data.vdictinv[v1], data.vdictinv[v2])]])
+#     des = set([j for i, j in data.direct_edge_dict[(
+#         data.vdictinv[v1], data.vdictinv[v2])]])
+#     if data.school not in des:
+#         b = min(len(ori), len(des))
+#     else:
+#         b = min(len(ori), len(des) + len(data.depots) - 1)
+#     print(k, '\t', v, '\t', b, '\t', b >= v)
 
 data.add_solution(assignment, gs)
 if len(argv) > 2:

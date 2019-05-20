@@ -1,23 +1,32 @@
-from sys import argv
-from utils import distance_matrix, generate_students, kosaraju
+from utils import generate_students
 from random import sample
 from pprint import pprint
-from collections import Counter
+from optparse import OptionParser
 
-N = 50
-L = 200
-MAXW = 0.002
-DEPOTS = 2
-CAPACITY = 100
+parser = OptionParser()
+parser.add_option("--if", dest="in_file")
+parser.add_option("--of", dest="out_file")
+parser.add_option("--N", "--stops", dest="N")
+parser.add_option("--S", "--students", dest="S")
+parser.add_option("--MAXW", "--max_walking_distance", dest="MAXW")
+parser.add_option("--K", "--depots", dest="K")
+parser.add_option("--C", "--capacity", dest="CAPACITY")
+(options,args) = parser.parse_args()
 
-with open(argv[1], 'r') as f:
+N = int(options.N)
+S = int(options.S)
+MAXW = float(options.MAXW)
+K = int(options.K)
+CAPACITY = int(options.CAPACITY)
+
+with open(options.in_file, 'r') as f:
     g = eval(f.readline())
 
 vset = sample(list(g), k=N)
-students = generate_students(L,vset,MAXW)
-depots = sample(vset[1:], k=DEPOTS)
+students = generate_students(S,vset,MAXW)
+depots = sample(vset[1:], k=K)
 
-with open(argv[2], 'w') as f:
+with open(options.out_file, 'w') as f:
     f.write(str(g) + '\n')
     f.write(str(vset) + '\n')
     f.write(str(students) + '\n')

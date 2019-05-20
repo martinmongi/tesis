@@ -1,5 +1,5 @@
 from random import uniform, choices, triangular, choice, sample
-from utils import dist, generate_students
+from utils import distance, generate_students
 
 STDN = 10
 STPN = 3
