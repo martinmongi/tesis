@@ -230,10 +230,6 @@ problem.linear_constraints.add(lin_expr=constraint,
 
 print("LOADS")
 
-# class CutCallback(cplex.callbacks.CutCallback):
-#     def __call__(self):
-
-
 # heur = heuristic_alternative_2(stops, students, max_walk_dist, std_stp, stp_std,
 #                                clusters, stop_to_stop_cluster, depots, capacity, g)
 # problem.MIP_starts.add(heur,

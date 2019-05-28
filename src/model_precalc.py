@@ -3,6 +3,7 @@ from collections import Counter, defaultdict, deque
 from pprint import pprint
 from sys import argv
 from optparse import OptionParser
+from heuristics import insertion_precalc_wrapper
 
 import cplex
 
@@ -16,9 +17,9 @@ parser.add_option("--mtz", dest="mtz", action="store_true")
 parser.add_option("--dfj", dest="mtz", action="store_false")
 (options, args) = parser.parse_args()
 
-print(options.mtz)
 # INPUT
 data = ProblemData(options.in_file)
+
 
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
@@ -62,6 +63,7 @@ vobj = [data.dist[v1][v2]
        [0
         for v0 in data.depots]
 
+
 if options.mtz:
     vnames += [vn('Rank', data.v_index(v0), data.v_index(v))
                for v0 in data.depots
@@ -72,7 +74,6 @@ if options.mtz:
     vobj += [0
              for v0 in data.depots
              for v in data.stops]
-
 
 # print(list(map(len, [vobj, vtypes, vnames])))
 # exit()
@@ -138,7 +139,7 @@ problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
 # Having out degree means vertex in stops can have stop
 rhs = [0 for v0 in data.depots for v in data.stops[1:]]
-sense = ['G' for v0 in data.depots for v in data.stops[1:]]
+sense = ['E' for v0 in data.depots for v in data.stops[1:]]
 constraint = [[
     [vn('RouteEdge', data.v_index(v0), data.v_index(v), data.v_index(v2))
      for v2 in data.stops if v2 != v] +
@@ -253,6 +254,9 @@ else:
                     loops.difference_update(loop)
     problem.register_callback(SubToursLazyConstraintCallback)
 
+
+problem.MIP_starts.add(insertion_precalc_wrapper(data, vnames),
+                       problem.MIP_starts.effort_level.auto, "insertion")
 
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())

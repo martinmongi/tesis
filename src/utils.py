@@ -1,4 +1,4 @@
-from math import fabs
+import math
 from collections import defaultdict, Counter, deque
 from random import choice, uniform
 from itertools import combinations_with_replacement
@@ -27,7 +27,7 @@ class ProblemData:
             print("                  ", len(self.students), "ESTUDIANTES")
             self.create_sdict()
             self.max_walk_dist = eval(ls[3])
-            self.create_student_to_stop_dict()
+            self.create_student_stop_dicts()
             self.depots = eval(ls[4])
             self.capacity = eval(ls[5])
             print("                  ", len(self.depots),
@@ -35,16 +35,26 @@ class ProblemData:
             self.create_distance_matrix()
             self.create_direct_edge_dict()
             self.create_max_flow_dict()
+            self.create_clusters()
+
+    def create_clusters(self):
+        self.clusters = Counter([tuple(sorted(v))
+                                 for k, v in self.student_to_stop.items()])
+        self.stop_to_clusters = {s: [c for c in self.clusters if s in c]
+                                 for s in self.stops}
 
     def create_max_flow_dict(self):
-        self.edge_max_flow = {}
+        self.edge_max_flow = {
+            (v1, v2): 0 for v1 in self.original_graph for v2 in self.original_graph[v1]}
         for e, tours in self.direct_edge_dict.items():
-            V1 = set([("START", i) for i, j in tours])
+            V1 = set([("START", i) for i, j in tours if i != self.school])
             V2 = set([("END", j) for i, j in tours])
             extras = set([("SOURCE"), ("SINK")])
             V = V1.union(V2).union(extras)
             g = {vi: defaultdict(lambda: 0) for vi in V}
             for i, j in tours:
+                if i == self.school:
+                    continue
                 g[("SOURCE")][("START", i)] = 1
                 g[("START", i)][("END", j)] = 1
                 if j == self.school:
@@ -62,12 +72,8 @@ class ProblemData:
         for v1 in self.path:
             for v2 in self.path[v1]:
                 p = self.path[v1][v2]
-                # print(len(p))
                 for i in range(len(p) - 1):
                     self.direct_edge_dict[(p[i], p[i + 1])].append((v1, v2))
-        # for e in self.direct_edge_dict:
-            # print(e, len(set([i for i, j in self.direct_edge_dict[e]])),
-            #     len(set([j for i, j in self.direct_edge_dict[e]])))
 
     def create_distance_matrix(self):
         g = self.original_graph
@@ -115,11 +121,16 @@ class ProblemData:
         self.sdict = {self.students[i]: i
                       for i in range(len(self.students))}
 
-    def create_student_to_stop_dict(self):
-        self.student_to_stop = {s: {st: dist(st, s)
+    def create_student_stop_dicts(self):
+        self.student_to_stop = {s: {st: haversine_dist(st, s)
                                     for st in self.stops[1:]
-                                    if dist(st, s) <= self.max_walk_dist}
+                                    if haversine_dist(st, s) <= self.max_walk_dist}
                                 for s in self.students}
+        self.stop_to_students = {st: {s: haversine_dist(st, s)
+                                      for s in self.students
+                                      if haversine_dist(st, s) <= self.max_walk_dist}
+                                 for st in self.stops[1:]}
+        self.stop_to_students[self.school] = {}
 
     def add_solution(self, stop_assignment, routes):
         self.routes = routes
@@ -131,48 +142,50 @@ class ProblemData:
                 f.write(str(dict(self.routes[v0])) + '\n')
             f.write(str(dict(self.stop_assignment)))
 
+# https://github.com/anxiaonong/Maxflow-Algorithms/blob/master/Dinic's%20Algorithm.py
+# Toqueteado para lista de adyacencia
 
-def max_flow(graph, source, sink):
-    def flow_bfs(g, s, t, rc):
-        visited = {i: False for i in rc}
-        prev = {i: None for i in rc}
+
+def max_flow(g, s, t):
+    # search augmenting path by using DFS
+    def dfs(level_graph, s, t, mf):
+        tmp = mf
+        if s == t:
+            return mf
+        if mf == 0:
+            return 0
+        for v in level_graph[s]:
+            next_flow = dfs(level_graph, v, t,
+                            min(tmp, g[s][v] - flow_graph[s][v]))
+            flow_graph[s][v] += next_flow
+            flow_graph[v][s] -= next_flow
+            tmp -= next_flow
+        return mf - tmp
+
+    def bfs(s, t):
         q = deque([s])
+        level = {v: -1 for v in g}
+        level_graph = {v: {} for v in g}
+        level[s] = 0
         while len(q) > 0:
             v = q.popleft()
-            # print(v)
-            visited[v] = True
-            for v2 in rc[v]:
-                if (not visited[v2]):
-                    # print(v,"->",v2)
+            for v2 in g[v]:
+                if flow_graph[v][v2] < g[v][v2] and level[v2] < 0:
+                    level[v2] = level[v] + 1
                     q.append(v2)
-                    prev[v2] = v
+        for v in g:
+            for v2 in g[v]:
+                if level[v] + 1 == level[v2]:
+                    level_graph[v][v2] = g[v][v2]
+        return level, level_graph
 
-        # print(prev)
-        if prev[t] == None:
-            return None
-        v = t
-        path = []
-        while prev[v] != None:
-            # print(v, prev[v])
-            path.append(v)
-            v = prev[v]
-            # print(v, prev[v])
-        path.append(s)
-        path.reverse()
-        return path
-
-    rc = copy.deepcopy(graph)
+    flow_graph = {v: {v2: 0 for v2 in g} for v in g}
     flow = 0
     while True:
-        path = flow_bfs(graph, source, sink, rc)
-        # print("Path:",path)
-        if not path:
+        level, level_graph = bfs(s, t)
+        if level[t] == -1:
             return flow
-        flow += 1
-        for i in range(0, len(path) - 1):
-            del rc[path[i]][path[i + 1]]
-            rc[path[i + 1]][path[i]] = 1
-    return flow
+        flow = flow + dfs(level_graph, s, t, 10000000)
 
 
 def bfs(g, v0):
@@ -192,13 +205,14 @@ def vn(*argv):
 
 
 def generate_students(n, stops, max_w):
+    max_w_deg = max_w / 78710
     students = []
     for _ in range(n):
         st = choice(stops[1:])
         while True:
-            std = (uniform(st[0] - max_w, st[0] + max_w),
-                   uniform(st[1] - max_w, st[1] + max_w))
-            if dist(std, st) <= max_w:
+            std = (uniform(st[0] - max_w_deg, st[0] + max_w_deg),
+                   uniform(st[1] - max_w_deg, st[1] + max_w_deg))
+            if haversine_dist(std, st) <= max_w:
                 break
         students.append(std)
     return students
@@ -206,6 +220,20 @@ def generate_students(n, stops, max_w):
 
 def dist(x, y):
     return ((x[0] - y[0])**2 + (x[1] - y[1])**2)**.5
+
+
+def haversine_dist(x, y):
+    lonx = math.radians(x[0])
+    lony = math.radians(y[0])
+    latx = math.radians(x[1])
+    laty = math.radians(y[1])
+    dlon = lony - lonx
+    dlat = laty - latx
+    a = math.sin(dlat / 2) ** 2 + math.cos(latx) * \
+        math.cos(laty) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(a**.5, (1 - a)**.5)
+    d = 6371e3 * c
+    return d
 
 
 def old_product_constraints(res_vn, b_vn, n_vn, n_ub):

@@ -2,15 +2,20 @@ import re
 from collections import Counter, defaultdict, deque
 from pprint import pprint
 from sys import argv
+from optparse import OptionParser
 
 import cplex
 
 from utils import (ProblemData, bfs, dist, old_product_constraints, transpose,
-                   vn)
+                   vn,haversine_dist)
+
+parser = OptionParser()
+parser.add_option("--if", dest="in_file")
+parser.add_option("--of", dest="out_file")
+(options, args) = parser.parse_args()
 
 # INPUT
-data = ProblemData(argv[1])
-
+data = ProblemData(options.in_file)
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
 
@@ -49,7 +54,7 @@ vobj = [data.original_graph[v1][v2][0]
        [0
         for v0 in data.depots
         for v1 in data.stops[1:]] + \
-       [0
+       [0.01 * haversine_dist(s, v1)
         for s in data.students
         for v0 in data.depots
         for v1 in data.student_to_stop[s]] + \
@@ -59,7 +64,7 @@ vobj = [data.original_graph[v1][v2][0]
 problem.variables.add(obj=vobj, types=vtypes, names=vnames)
 
 # Upper bound on edges
-rhs = [data.edge_max_flow[v1, v2]
+rhs = [data.edge_max_flow[v1, v2] + 1
        for v1 in data.original_graph
        for v2 in data.original_graph[v1]]
 sense = ['L' for v1 in data.original_graph for v2 in data.original_graph[v1]]
@@ -247,38 +252,24 @@ print("BEST OBJ: ", problem.solution.get_objective_value())
 sol = problem.solution.get_values()
 dsol = {vnames[i]: sol[i] for i in range(len(sol)) if sol[i] > 0.5}
 
+# pprint(dsol)
 gs = {v0: defaultdict(lambda: {}) for v0 in data.depots}
-
-# loads = defaultdict(lambda: 0)
 
 assignment = {}
 for vname in dsol:
+    if dsol[vname] < 0.5:
+        continue
     sp = vname.split("_")
     if sp[0] == 'RouteEdge':
         v0, i, j = map(int, sp[1:])
-        # print(vname, '\t', dsol[vname], '\t', min(
-        #     len(set([v for v, _ in data.direct_edge_dict[(
-        #         data.vdictinv[i], data.vdictinv[j])]])),
-        #     len(set([v for _, v in data.direct_edge_dict[data.vdictinv[i], data.vdictinv[j]]]))))
-        # loads[i, j] += dsol[vname]
         gs[data.vdictinv[v0]][data.vdictinv[i]][data.vdictinv[j]
                                                 ] = data.original_graph[data.vdictinv[i]][data.vdictinv[j]][1]
+        print(i, j, dsol[vname], data.edge_max_flow[data.vdictinv[i], data.vdictinv[j]],
+              dsol[vname] - data.edge_max_flow[data.vdictinv[i], data.vdictinv[j]],
+              dsol[vname] - data.edge_max_flow[data.vdictinv[i], data.vdictinv[j]] <= 0, sep='\t')
     elif sp[0] == 'RouteStopStudent':
         v0, s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]
 
-# for k, v in loads.items():
-#     v1, v2 = k
-#     ori = set([i for i, j in data.direct_edge_dict[(
-#         data.vdictinv[v1], data.vdictinv[v2])]])
-#     des = set([j for i, j in data.direct_edge_dict[(
-#         data.vdictinv[v1], data.vdictinv[v2])]])
-#     if data.school not in des:
-#         b = min(len(ori), len(des))
-#     else:
-#         b = min(len(ori), len(des) + len(data.depots) - 1)
-#     print(k, '\t', v, '\t', b, '\t', b >= v)
-
 data.add_solution(assignment, gs)
-if len(argv) > 2:
-    data.write_solution(argv[2])
+data.write_solution(options.out_file)
