@@ -2,7 +2,6 @@ import math
 from collections import defaultdict, Counter, deque
 from random import choice, uniform
 from itertools import combinations_with_replacement
-import matplotlib.pyplot as plt
 from heapq import heappop, heappush
 import sys
 from pprint import pprint

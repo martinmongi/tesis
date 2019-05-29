@@ -3,6 +3,7 @@ from collections import Counter, defaultdict, deque
 from pprint import pprint
 from sys import argv
 from optparse import OptionParser
+from heuristics import insertion_direct_wrapper
 
 import cplex
 
@@ -64,7 +65,7 @@ vobj = [data.original_graph[v1][v2][0]
 problem.variables.add(obj=vobj, types=vtypes, names=vnames)
 
 # Upper bound on edges
-rhs = [data.edge_max_flow[v1, v2] + 1
+rhs = [data.edge_max_flow[v1, v2]
        for v1 in data.original_graph
        for v2 in data.original_graph[v1]]
 sense = ['L' for v1 in data.original_graph for v2 in data.original_graph[v1]]
@@ -247,6 +248,12 @@ class SubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCallback):
 
 
 problem.register_callback(SubToursLazyConstraintCallback)
+
+ins_heur = insertion_direct_wrapper(data, vnames)
+if ins_heur:
+    problem.MIP_starts.add(ins_heur,
+                           problem.MIP_starts.effort_level.auto, "insertion")
+
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
 sol = problem.solution.get_values()
@@ -264,9 +271,9 @@ for vname in dsol:
         v0, i, j = map(int, sp[1:])
         gs[data.vdictinv[v0]][data.vdictinv[i]][data.vdictinv[j]
                                                 ] = data.original_graph[data.vdictinv[i]][data.vdictinv[j]][1]
-        print(i, j, dsol[vname], data.edge_max_flow[data.vdictinv[i], data.vdictinv[j]],
-              dsol[vname] - data.edge_max_flow[data.vdictinv[i], data.vdictinv[j]],
-              dsol[vname] - data.edge_max_flow[data.vdictinv[i], data.vdictinv[j]] <= 0, sep='\t')
+        # print(i, j, dsol[vname], data.edge_max_flow[data.vdictinv[i], data.vdictinv[j]],
+        #       dsol[vname] - data.edge_max_flow[data.vdictinv[i], data.vdictinv[j]],
+        #       dsol[vname] - data.edge_max_flow[data.vdictinv[i], data.vdictinv[j]] <= 0, sep='\t')
     elif sp[0] == 'RouteStopStudent':
         v0, s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]

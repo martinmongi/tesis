@@ -64,7 +64,6 @@ def insertion_precalc_wrapper(data, vnames):
     try:
         heur = InsertionHeuristic(data)
     except KeyError:
-
         return
     onvars = []
     stop_route = {}
@@ -108,3 +107,29 @@ def insertion_flat_wrapper(data, vnames):
                              data.v_index(v), data.s_index(s)))
 
     return (vnames, [1 if v in onvars else 0 for v in vnames])
+
+def insertion_direct_wrapper(data, vnames):
+    try:
+        heur = InsertionHeuristic(data)
+    except KeyError:
+        return
+    onvars = []
+    stop_route = {}
+    for p in heur.paths:
+        onvars.append(vn('RouteActive', data.v_index(p[0])))
+        for i in range(len(p) - 1):
+            smallpath = data.path[p[i]][p[i+1]]
+            for j in range(len(smallpath) -1):
+                onvars.append(vn('RouteEdge', data.v_index(p[0]),
+                                data.v_index(smallpath[j]), data.v_index(smallpath[j+1])))
+        for i in range(len(p)):
+            onvars.append(vn('RouteStop', data.v_index(p[0]), data.v_index(p[i])))
+            stop_route[p[i]] = p[0]
+
+    for v in heur.stops:
+        for s in heur.stops[v]:
+            onvars.append(vn('RouteStopStudent', data.v_index(stop_route[v]),
+                            data.v_index(v), data.s_index(s)))
+
+    return (vnames, [1 if v in onvars else 0 for v in vnames])
+
