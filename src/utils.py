@@ -203,20 +203,6 @@ def vn(*argv):
     return "_".join(map(str, argv))
 
 
-def generate_students(n, stops, max_w):
-    max_w_deg = max_w / 78710
-    students = []
-    for _ in range(n):
-        st = choice(stops[1:])
-        while True:
-            std = (uniform(st[0] - max_w_deg, st[0] + max_w_deg),
-                   uniform(st[1] - max_w_deg, st[1] + max_w_deg))
-            if haversine_dist(std, st) <= max_w:
-                break
-        students.append(std)
-    return students
-
-
 def dist(x, y):
     return ((x[0] - y[0])**2 + (x[1] - y[1])**2)**.5
 
