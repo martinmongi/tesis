@@ -22,7 +22,6 @@ parser.add_option("--grouped", dest="grouped", action="store_true")
 # INPUT
 data = ProblemData(options.in_file)
 
-
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
 
@@ -258,8 +257,8 @@ else:
     problem.register_callback(SubToursLazyConstraintCallback)
 
 
-problem.MIP_starts.add(insertion_precalc_wrapper(data, [v[0] for v in variables]),
-                       problem.MIP_starts.effort_level.auto, "insertion")
+# problem.MIP_starts.add(insertion_precalc_wrapper(data, [v[0] for v in variables]),
+#                        problem.MIP_starts.effort_level.auto, "insertion")
 
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())

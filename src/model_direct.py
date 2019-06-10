@@ -255,10 +255,10 @@ class SubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCallback):
 
 problem.register_callback(SubToursLazyConstraintCallback)
 
-ins_heur = insertion_direct_wrapper(data, [v[0] for v in variables])
-if ins_heur:
-    problem.MIP_starts.add(ins_heur,
-                           problem.MIP_starts.effort_level.auto, "insertion")
+# ins_heur = insertion_direct_wrapper(data, [v[0] for v in variables])
+# if ins_heur:
+#     problem.MIP_starts.add(ins_heur,
+#                            problem.MIP_starts.effort_level.auto, "insertion")
 
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
