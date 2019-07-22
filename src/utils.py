@@ -39,6 +39,9 @@ class ProblemData:
     def create_clusters(self):
         self.clusters = Counter([tuple(sorted(v))
                                  for k, v in self.student_to_stop.items()])
+        self.cluster_to_students = defaultdict(lambda:set())
+        for s in self.students:
+            self.cluster_to_students[tuple(sorted(self.student_to_stop[s]))].add(s)
         self.stop_to_clusters = {s: [c for c in self.clusters if s in c]
                                  for s in self.stops}
 
@@ -263,3 +266,6 @@ def transpose(g):
         for v2 in g[v]:
             res[v2][v] = g[v][v2]
     return res
+
+def avg_point(ps):
+    return (sum(p[0] for p in ps)/len(ps), sum(p[1] for p in ps)/len(ps))

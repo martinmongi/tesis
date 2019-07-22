@@ -6,6 +6,9 @@ from pprint import pprint
 def assign_students_mip(data, gs):
 
     gsx = {v0:[v for v in gs[v0]] for v0 in gs}
+    vset = set()
+    for v0 in gs:
+        vset.update(gs[v0])
 
     pprint(gsx)
 
@@ -13,7 +16,7 @@ def assign_students_mip(data, gs):
     problem.objective.set_sense(problem.objective.sense.minimize)
 
     variables = [(vn('StopStudent', data.v_index(v1), data.s_index(s)), 'B', haversine_dist(s,v1))
-                 for s in data.students for v1 in data.student_to_stop[s]]
+                 for s in data.students for v1 in data.student_to_stop[s] if v1 in vset]
 
     problem.variables.add(obj=[v[2] for v in variables],
                           types=[v[1] for v in variables],
@@ -24,8 +27,8 @@ def assign_students_mip(data, gs):
     sense = ['E' for s in data.students]
     constraint = [[
         [vn('StopStudent', data.v_index(v1), data.s_index(s))
-            for v1 in data.student_to_stop[s]],
-        [1 for v1 in data.student_to_stop[s]]
+            for v1 in data.student_to_stop[s] if v1 in vset],
+        [1 for v1 in data.student_to_stop[s] if v1 in vset]
     ]for s in data.students]
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
@@ -34,8 +37,8 @@ def assign_students_mip(data, gs):
     sense = ['L' for v0 in gs]
     constraint = [[
         [vn('StopStudent', data.v_index(v), data.s_index(s))
-            for v in gs[v0] for s in data.stop_to_students[v]],
-        [1 for v in gs[v0] for s in data.stop_to_students[v]]
+            for v in gs[v0] if v in data.stops for s in data.stop_to_students[v]],
+        [1 for v in gs[v0] if v in data.stops for s in data.stop_to_students[v]]
     ] for v0 in gs]
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 

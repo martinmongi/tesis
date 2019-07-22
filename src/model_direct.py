@@ -4,6 +4,8 @@ from pprint import pprint
 from sys import argv
 from optparse import OptionParser
 from heuristics import insertion_direct_wrapper
+from student_assignment import assign_students_mip
+from utils import avg_point, haversine_dist
 
 import cplex
 
@@ -28,7 +30,7 @@ variables = [(vn('RouteEdge', data.v_index(v0), data.v_index(v1), data.v_index(v
     [(vn('RouteActive', data.v_index(v0)), 'B', 0) for v0 in data.depots]
 
 if options.grouped:
-    variables += [(vn('RouteStopCluster', data.v_index(v0), data.v_index(v1), list(map(data.v_index, c))), 'I', 0)
+    variables += [(vn('RouteStopCluster', data.v_index(v0), data.v_index(v1), list(map(data.v_index, c))), 'I', .00 * haversine_dist(v1,avg_point(data.cluster_to_students[c])))
                   for v0 in data.depots for v1 in data.stops for c in data.stop_to_clusters[v1]]
 else:
     variables += [(vn('RouteStopStudent', data.v_index(v0), data.v_index(v1), data.s_index(s)), 'B', 0)
@@ -283,6 +285,9 @@ for vname in dsol:
     elif sp[0] == 'RouteStopStudent':
         v0, s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]
+
+if options.grouped:
+    assignment = assign_students_mip(data, gs)
 
 data.add_solution(assignment, gs)
 data.write_solution(options.out_file)
