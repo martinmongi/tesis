@@ -43,7 +43,7 @@ if options.grouped:
                   for v0 in data.depots for v1 in data.stops for c in data.stop_to_clusters[v1]]
 else:
     variables += [(vn('RouteStopStudent', data.v_index(v0), data.v_index(v1), data.s_index(s)), 'B', 0)
-                  for s in data.students for v0 in data.depots for v1 in data.student_to_stop[s]]
+                for s in data.students for v0 in data.depots for v1 in data.student_to_stop[s]]
 
 if options.mtz:
     variables += [(vn('Rank', data.v_index(v0), data.v_index(v)), 'C', 0)
