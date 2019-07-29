@@ -12,7 +12,7 @@ parser.add_option("--if", dest="in_file")
 parser.add_option("--of", dest="out_file")
 (options, args) = parser.parse_args()
 
-COLORS = ['c', 'm', 'y', 'k']
+COLORS = ['c', 'm', 'y', 'r', 'g', 'b', 'k']
 
 plt.figure(figsize=(10,10))
 

@@ -22,6 +22,8 @@ data = ProblemData(options.in_file)
 
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
+problem.parameters.dettimelimit.set(1000000)
+problem.parameters.timelimit.set(600)
 
 variables = [(vn('Edge', data.v_index(v1), data.v_index(v2)), 'B', data.dist[v1][v2])
              for v1 in data.stops for v2 in data.stops if v1 != v2] + \
@@ -237,8 +239,8 @@ for r in gs:
         v = nxt
 del gs[data.school]
 
-if options.grouped:
-    assignment = assign_students_mip(data, gs)
+# if options.grouped:
+#     assignment = assign_students_mip(data, gs)
 
 data.add_solution(assignment, gs)
 data.write_solution(options.out_file)
