@@ -27,6 +27,9 @@ data = ProblemData(options.in_file)
 
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
+problem.parameters.dettimelimit.set(1000000)
+problem.parameters.timelimit.set(600)
+
 
 variables = [
     (vn('RouteEdge', data.v_index(v0), data.v_index(

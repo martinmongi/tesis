@@ -17,12 +17,15 @@ parser = OptionParser()
 parser.add_option("--if", dest="in_file")
 parser.add_option("--of", dest="out_file")
 parser.add_option("--grouped", dest="grouped", action="store_true")
+parser.add_option("--optcut", dest="optcut", action="store_true")
 (options, args) = parser.parse_args()
 
 # INPUT
 data = ProblemData(options.in_file)
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
+problem.parameters.dettimelimit.set(1000000)
+problem.parameters.timelimit.set(600)
 
 variables = [(vn('RouteEdge', data.v_index(v0), data.v_index(v1), data.v_index(v2)), 'I', data.original_graph[v1][v2][0])
              for v0 in data.depots for v1 in data.original_graph for v2 in data.original_graph[v1]] + \
@@ -42,21 +45,22 @@ problem.variables.add(obj=[v[2] for v in variables],
                       types=[v[1] for v in variables],
                       names=[v[0] for v in variables])
 
-# Upper bound on edges
-rhs = [data.edge_max_flow[v1, v2]
-       for v1 in data.original_graph
-       for v2 in data.original_graph[v1]]
-sense = ['L' for v1 in data.original_graph for v2 in data.original_graph[v1]]
-constraint = [[
-    [vn('RouteEdge', data.v_index(v0), data.v_index(v1), data.v_index(v2))
-     for v0 in data.depots],
-    [1 for v0 in data.depots]
-] for v1 in data.original_graph for v2 in data.original_graph[v1]]
-problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
-                               names=[vn('BoundOnEdge', data.v_index(v1),
-                                         data.v_index(v2))
-                                      for v1 in data.original_graph
-                                      for v2 in data.original_graph[v1]])
+if options.optcut:
+    # Upper bound on edges
+    rhs = [data.edge_max_flow[v1, v2]
+        for v1 in data.original_graph
+        for v2 in data.original_graph[v1]]
+    sense = ['L' for v1 in data.original_graph for v2 in data.original_graph[v1]]
+    constraint = [[
+        [vn('RouteEdge', data.v_index(v0), data.v_index(v1), data.v_index(v2))
+        for v0 in data.depots],
+        [1 for v0 in data.depots]
+    ] for v1 in data.original_graph for v2 in data.original_graph[v1]]
+    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                                names=[vn('BoundOnEdge', data.v_index(v1),
+                                            data.v_index(v2))
+                                        for v1 in data.original_graph
+                                        for v2 in data.original_graph[v1]])
 
 # All vertices have equal in and out degree, other than depots on their own tour
 # or school in all depots
@@ -291,8 +295,8 @@ for vname in dsol:
         v0, s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]
 
-if options.grouped:
-    assignment = assign_students_mip(data, gs)
+# if options.grouped:
+#     assignment = assign_students_mip(data, gs)
 
 data.add_solution(assignment, gs)
 data.write_solution(options.out_file)
