@@ -23,8 +23,8 @@ parser.add_option("--optcut", dest="optcut", action="store_true")
 data = ProblemData(options.in_file)
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
-problem.parameters.dettimelimit.set(1000000)
-problem.parameters.timelimit.set(600)
+# problem.parameters.dettimelimit.set(1000000)
+# problem.parameters.timelimit.set(600)
 
 variables = [(vn('RouteEdge', data.v_index(v0), data.v_index(v1), data.v_index(v2)), 'I', data.original_graph[v1][v2][0])
              for v0 in data.depots for v1 in data.original_graph for v2 in data.original_graph[v1]] + \

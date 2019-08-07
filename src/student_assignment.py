@@ -5,12 +5,12 @@ from pprint import pprint
 
 def assign_students_mip(data, gs):
 
-    gsx = {v0:[v for v in gs[v0]] for v0 in gs}
+    # gsx = {v0:[v for v in gs[v0]] for v0 in gs}
     vset = set()
     for v0 in gs:
         vset.update(gs[v0])
 
-    pprint(gsx)
+    # pprint(gsx)
 
     problem = cplex.Cplex()
     problem.objective.set_sense(problem.objective.sense.minimize)

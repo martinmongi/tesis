@@ -1,5 +1,5 @@
 from utils import ProblemData
-from random import sample
+from random import sample, choice
 from collections import defaultdict
 from pprint import pprint
 from utils import vn
@@ -19,19 +19,30 @@ def greedy_stop_selection(stops, students, stop_to_students, capacity):
     print("CUBRIENDO", len(students), "CON", len(res), "PARADAS")
     return res
 
+def random_stop_selection(stops, students, students_to_stop, capacity):
+    res = defaultdict(lambda: [])
+    uncovered = set(students)
+    for st in students:
+        sp = choice(students_to_stop[st])
+        res[sp].append(st)
+    print("CUBRIENDO", len(students), "CON", len(res), "PARADAS")
+    return res
+
 
 class InsertionHeuristic():
     def __init__(self, data):
         self.stops = greedy_stop_selection(
             data.stops, data.students, data.stop_to_students, data.capacity)
+        self.stops = random_stop_selection(
+            data.stops, data.students, data.student_to_stop, data.capacity)
         unrouted = set(self.stops.keys())
         depots = [v for v in data.depots if v in self.stops]
-        if len(depots) > 1.3 * len(data.students) / data.capacity:
-            depots = sample(depots, int(
-                1.2 * len(data.students) / data.capacity))
-        elif len(depots) < 1.1 * len(data.students) / data.capacity:
-            depots += sample([v for v in data.depots if v not in depots],
-                             int(1.2 * len(data.students) / data.capacity) - len(depots))
+        # if len(depots) > 1.3 * len(data.students) / data.capacity:
+        #     depots = sample(depots, int(
+        #         1.2 * len(data.students) / data.capacity))
+        # elif len(depots) < 1.1 * len(data.students) / data.capacity:
+        #     depots += sample([v for v in data.depots if v not in depots],
+        #                      int(1.2 * len(data.students) / data.capacity) - len(depots))
 
         self.paths = [[v, data.school] for v in depots]
         self.load = [len(self.stops[v]) for v in depots]
@@ -59,6 +70,9 @@ class InsertionHeuristic():
                 print("HEURISTIC FAILED")
                 raise KeyError
 
+class SchitekkatHeur:
+    def __init__(self, data):
+        
 
 def insertion_precalc_wrapper(data, vnames):
     try:

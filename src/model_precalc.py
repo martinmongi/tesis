@@ -4,6 +4,7 @@ from pprint import pprint
 from sys import argv
 from optparse import OptionParser
 from heuristics import insertion_precalc_wrapper
+from student_assignment import assign_students_mip
 from random import shuffle
 from union_find import UnionFind
 
@@ -358,6 +359,11 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
 # problem.register_callback(NodeHeuristicCallback)
 
 
+ins_heur = insertion_precalc_wrapper(data, [v[0] for v in variables])
+if ins_heur:
+    problem.MIP_starts.add(ins_heur,
+                           problem.MIP_starts.effort_level.auto, "insertion")
+
 # problem.MIP_starts.add(insertion_precalc_wrapper(data, [v[0] for v in variables]),
 #                        problem.MIP_starts.effort_level.auto, "insertion")
 
@@ -377,6 +383,9 @@ for vname in dsol:
     elif sp[0] == 'RouteStopStudent':
         v0, s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]
+
+if options.grouped:
+    assignment = assign_students_mip(data, gs)
 
 data.add_solution(assignment, gs)
 data.write_solution(options.out_file)

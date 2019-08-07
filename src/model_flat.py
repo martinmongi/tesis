@@ -22,8 +22,9 @@ data = ProblemData(options.in_file)
 
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
-problem.parameters.dettimelimit.set(1000000)
-problem.parameters.timelimit.set(600)
+# problem.parameters.dettimelimit.set(1000000)
+# problem.parameters.timelimit.set(600)
+# problem.parameters.mip.display.set(1)
 
 variables = [(vn('Edge', data.v_index(v1), data.v_index(v2)), 'B', data.dist[v1][v2])
              for v1 in data.stops for v2 in data.stops if v1 != v2] + \
@@ -206,10 +207,10 @@ constraint = [[
 ] for v1 in data.stops for v2 in data.stops if v1 != v2]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-# ins_heur = insertion_flat_wrapper(data, [v[0] for v in variables])
-# if ins_heur:
-#     problem.MIP_starts.add(ins_heur,
-#                            problem.MIP_starts.effort_level.auto, "insertion")
+ins_heur = insertion_flat_wrapper(data, [v[0] for v in variables])
+if ins_heur:
+    problem.MIP_starts.add(ins_heur,
+                           problem.MIP_starts.effort_level.auto, "insertion")
 
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
