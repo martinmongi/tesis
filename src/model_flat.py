@@ -5,6 +5,7 @@ from sys import argv
 from optparse import OptionParser
 from heuristics import insertion_flat_wrapper
 from student_assignment import assign_students_mip
+from cool_heuristic import CoolHeuristic
 
 import cplex
 
@@ -39,7 +40,7 @@ variables = [(vn('Edge', data.v_index(v1), data.v_index(v2)), 'B', data.dist[v1]
      for v0 in data.depots]
 
 if options.grouped:
-    variables += [(vn('StopCluster', data.v_index(v1), list(map(data.v_index, c))), 'I', 0)
+    variables += [(vn('StopCluster', data.v_index(v1), sorted(list(map(data.v_index, c)))), 'I', 0)
                   for v1 in data.stops for c in data.stop_to_clusters[v1]]
 
 else:
@@ -113,7 +114,7 @@ if options.grouped:
     sense = ['E' for c in data.clusters]
     constraint = [[
         [vn('StopCluster', data.v_index(
-            v1), list(map(data.v_index, c))) for v1 in c],
+            v1), sorted(list(map(data.v_index, c)))) for v1 in c],
         [1 for v1 in c]
     ] for c in data.clusters]
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
@@ -123,7 +124,7 @@ if options.grouped:
     sense = [
         'L' for v1 in data.stops for c in data.stop_to_clusters[v1]]
     constraint = [[
-        [vn('StopCluster', data.v_index(v1), list(map(data.v_index, c))),
+        [vn('StopCluster', data.v_index(v1), sorted(list(map(data.v_index, c)))),
          vn('Stop', data.v_index(v1))],
         [1, - data.clusters[c]]
     ] for v1 in data.stops for c in data.stop_to_clusters[v1]]
@@ -133,7 +134,7 @@ if options.grouped:
     rhs = [0 for v in data.stops]
     sense = ['E' for v in data.stops]
     constraint = [[
-        [vn('StopCluster', data.v_index(v), list(map(data.v_index, c)))
+        [vn('StopCluster', data.v_index(v), sorted(list(map(data.v_index, c))))
          for c in data.stop_to_clusters[v]] +
         [vn('EdgeLoad', data.v_index(v2), data.v_index(v))
          for v2 in data.stops if v2 != v] +
@@ -207,10 +208,9 @@ constraint = [[
 ] for v1 in data.stops for v2 in data.stops if v1 != v2]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-ins_heur = insertion_flat_wrapper(data, [v[0] for v in variables])
-if ins_heur:
-    problem.MIP_starts.add(ins_heur,
-                           problem.MIP_starts.effort_level.auto, "insertion")
+heur = CoolHeuristic(data)
+sol = heur.flat_varset([v[0] for v in variables], options.grouped)
+problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
 
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
@@ -240,8 +240,9 @@ for r in gs:
         v = nxt
 del gs[data.school]
 
-# if options.grouped:
-#     assignment = assign_students_mip(data, gs)
+if options.grouped:
+    # pprint(gs)
+    assignment = assign_students_mip(data, gs)
 
 data.add_solution(assignment, gs)
 data.write_solution(options.out_file)
