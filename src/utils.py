@@ -35,13 +35,17 @@ class ProblemData:
             self.create_direct_edge_dict()
             self.create_max_flow_dict()
             self.create_clusters()
+            print("                  ", len(self.clusters),
+                  "CLUSTERS DE ESTUDIANTES")
+            self.create_distance_matrix()
 
     def create_clusters(self):
         self.clusters = Counter([tuple(sorted(v))
                                  for k, v in self.student_to_stop.items()])
-        self.cluster_to_students = defaultdict(lambda:set())
+        self.cluster_to_students = defaultdict(lambda: set())
         for s in self.students:
-            self.cluster_to_students[tuple(sorted(self.student_to_stop[s]))].add(s)
+            self.cluster_to_students[tuple(
+                sorted(self.student_to_stop[s]))].add(s)
         self.stop_to_clusters = {s: [c for c in self.clusters if s in c]
                                  for s in self.stops}
 
@@ -225,11 +229,17 @@ def haversine_dist(x, y):
 
 
 def old_product_constraints(res_vn, b_vn, n_vn, n_ub):
-    rhs = [0, 0, -n_ub]
-    sense = ['L', 'L', 'G']
+    rhs = [
+            0,
+            # 0,
+           -n_ub]
+    sense = [ 
+            'L',
+            # 'L',
+             'G']
     constraints = [
         [[res_vn, b_vn], [1, -n_ub]],
-        [[res_vn, n_vn], [1, -1]],
+        # [[res_vn, n_vn], [1, -1]],
         [[res_vn, n_vn, b_vn], [1, -1, -n_ub]]
     ]
     return (rhs, sense, constraints)
@@ -264,8 +274,9 @@ def transpose(g):
     res = defaultdict(lambda: {})
     for v in g:
         for v2 in g[v]:
-            res[v2][v] = g[v][v2]
+            res[v2][v]=g[v][v2]
     return res
+
 
 def avg_point(ps):
     return (sum(p[0] for p in ps)/len(ps), sum(p[1] for p in ps)/len(ps))

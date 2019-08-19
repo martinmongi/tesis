@@ -3,7 +3,7 @@ from collections import Counter, defaultdict, deque
 from pprint import pprint
 from sys import argv
 from optparse import OptionParser
-from heuristics import insertion_flat_wrapper
+# from heuristics import insertion_flat_wrapper
 from student_assignment import assign_students_mip
 from cool_heuristic import CoolHeuristic
 
@@ -16,6 +16,7 @@ parser = OptionParser()
 parser.add_option("--if", dest="in_file")
 parser.add_option("--of", dest="out_file")
 parser.add_option("--grouped", dest="grouped", action="store_true")
+parser.add_option("--heur", dest="heur", action="store_true")
 (options, args) = parser.parse_args()
 
 # INPUT
@@ -24,7 +25,7 @@ data = ProblemData(options.in_file)
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
 # problem.parameters.dettimelimit.set(1000000)
-# problem.parameters.timelimit.set(600)
+problem.parameters.timelimit.set(3600)
 # problem.parameters.mip.display.set(1)
 
 variables = [(vn('Edge', data.v_index(v1), data.v_index(v2)), 'B', data.dist[v1][v2])
@@ -208,9 +209,10 @@ constraint = [[
 ] for v1 in data.stops for v2 in data.stops if v1 != v2]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-heur = CoolHeuristic(data)
-sol = heur.flat_varset([v[0] for v in variables], options.grouped)
-problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
+if options.heur:
+    heur = CoolHeuristic(data)
+    sol = heur.flat_varset([v[0] for v in variables], options.grouped)
+    problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
 
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())

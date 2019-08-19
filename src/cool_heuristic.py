@@ -20,15 +20,14 @@ class CoolHeuristic:
             map(self.data.v_index, self.paths[v0])) for v0 in self.paths})
 
     def feasible(self, paths, wont_be_routed):
-        tpaths = tuple(sorted([tuple(sorted(p)) for v0,p in paths.items()]))
+        tpaths = tuple(sorted([tuple(sorted(p)) for v0, p in paths.items()]))
         tunrouted = tuple(sorted(wont_be_routed))
-        if (tpaths,tunrouted) in self.feasibility:
-            return self.feasibility[(tpaths,tunrouted)]
-        self.feasibility[(tpaths, tunrouted)] = self.feasible_aux(
-            paths, wont_be_routed)
+        if (tpaths, tunrouted) not in self.feasibility:
+            self.feasibility[(tpaths, tunrouted)] = self.feasible_aux(
+                paths, wont_be_routed)
         return self.feasibility[(tpaths, tunrouted)]
 
-    def feasible_aux(self,paths,wont_be_routed):
+    def feasible_aux(self, paths, wont_be_routed):
         problem = cplex.Cplex()
         problem.parameters.emphasis.mip.set(1)
         problem.parameters.mip.display.set(0)
@@ -153,31 +152,29 @@ class CoolHeuristic:
         improved = True
         while True:
             # self.pp()
+            if not improved:
+                break
+
             savings = []
             savings += self.removal_savings()
             savings += self.rem_ins_within_savings()
             savings += self.rem_ins_between_savings()
             savings += self.replace_savings()
             savings += self.merge_savings()
-            savings.sort()
-            if not improved:
-                break
+            heapq.heapify(savings)
+            
 
             improved = False
-            for s, com, t in savings:
-                # print(s,com,t)
+            while len(savings) > 0:
+                s, com, t = heapq.heappop(savings)
                 if com == 'remove':
                     v0, i = t
                     np = remove(self.paths, t)
                     if self.feasible(np, self.unrouted + [self.paths[v0][i]]):
                         print("Removing vertex", self.data.v_index(
                             self.paths[v0][i]), "in route", self.data.v_index(v0), "saving", round(-s, 2))
-                        # print(s, com, self.data.v_index(v0), i)
                         self.unrouted.append(self.paths[v0][i])
-                        # print(list(map(self.data.v_index, self.unrouted)))
                         self.paths = np
-                        # print(com,t)
-                        # pprint(self.paths)
                         improved = True
                         break
                 elif com == 'rem_ins_within':
@@ -185,26 +182,17 @@ class CoolHeuristic:
                     np = rem_ins_within(self.paths, t)
                     print("Moving vertex", self.data.v_index(
                         self.paths[v0][i]), "in route", self.data.v_index(v0), "saving", round(-s, 2))
-                    # print(s, com, self.data.v_index(v0), i, j)
-                    # print(list(map(self.data.v_index, self.unrouted)))
                     self.paths = np
-                    # print(com,t)
-                    # pprint(self.paths)
                     improved = True
                     break
                 elif com == 'rem_ins_between':
                     v0, i, u0, j = t
                     np = rem_ins_between(self.paths, t)
                     if self.feasible(np, self.unrouted):
-                        # print(s, com, self.data.v_index(v0),
-                        #       i, self.data.v_index(u0), j)
                         print("Moving vertex", self.data.v_index(
                             self.paths[v0][i]), "in route", self.data.v_index(v0),
                             "to route",  self.data.v_index(u0), "saving", round(-s, 2))
-                        # print(list(map(self.data.v_index, self.unrouted)))
                         self.paths = np
-                        # print(com,t)
-                        # pprint(self.paths)
                         improved = True
                         break
                 elif com == 'replace':
@@ -214,27 +202,19 @@ class CoolHeuristic:
                     nur.append(self.paths[v0][i])
                     nur.remove(v_in)
                     if self.feasible(np, nur):
-                        # print(s, com, self.data.v_index(v0),
-                        #       i, self.data.v_index(v_in))
                         print("Replacing vertex", self.data.v_index(
                             self.paths[v0][i]), "in route", self.data.v_index(v0),
                             "with",  self.data.v_index(v_in), "saving", round(-s, 2))
                         self.paths = np
                         self.unrouted = nur
-                        # print(list(map(self.data.v_index, self.unrouted)))
-                        # print(com,t)
-                        # pprint(self.paths)
                         improved = True
                         break
                 elif com == 'merge':
                     v0, u0 = t
                     np = merge(self.paths, t)
                     if self.feasible(np, self.unrouted):
-                        # print(s, com, self.data.v_index(
-                        #     v0), self.data.v_index(u0))
                         print("Merging routes", self.data.v_index(v0),
                               "and ", self.data.v_index(u0), "saving", round(-s, 2))
-                        # print(list(map(self.data.v_index, self.unrouted)))
                         self.paths = np
                         improved = True
                         break
@@ -353,13 +333,13 @@ class CoolHeuristic:
         stop_to_route = {}
 
         for v0 in self.graphs:
-            vs[vn('RouteActive', self.data.v_index(v0))] = 1
+            vs[vn('RoA', self.data.v_index(v0))] = 1
             for v in self.graphs[v0]:
-                vs[vn('RouteStop', self.data.v_index(
+                vs[vn('RoSto', self.data.v_index(
                     v0), self.data.v_index(v))] = 1
                 stop_to_route[v] = v0
                 for v2 in self.graphs[v0][v]:
-                    vs[vn('RouteEdge', self.data.v_index(v0), self.data.v_index(
+                    vs[vn('RoEd', self.data.v_index(v0), self.data.v_index(
                         v), self.data.v_index(v2))] = 1
 
         assignment = assign_students_mip(self.data, self.graphs)
@@ -368,10 +348,10 @@ class CoolHeuristic:
             c = self.data.student_to_stop[s]
             v0 = stop_to_route[v]
             if grouped:
-                vs[vn('RouteStopCluster', self.data.v_index(v0),
+                vs[vn('RoStoCl', self.data.v_index(v0),
                       self.data.v_index(v), sorted(list(map(self.data.v_index, c))))] += 1
             else:
-                vs[vn('RouteStopStudent', self.data.v_index(v0),
+                vs[vn('RoStoStu', self.data.v_index(v0),
                       self.data.v_index(v), self.data.s_index(s))] = 1
         # pprint(vs)
         res = [varset, [vs[v] for v in varset]]
@@ -386,15 +366,15 @@ class CoolHeuristic:
         stop_to_route = {}
 
         for v0 in self.graphs:
-            vs[vn('RouteActive', self.data.v_index(v0))] = 1
+            vs[vn('RoA', self.data.v_index(v0))] = 1
             for v in self.graphs[v0]:
-                vs[vn('RouteStop', self.data.v_index(
+                vs[vn('RoSto', self.data.v_index(
                     v0), self.data.v_index(v))] = 1
                 stop_to_route[v] = v0
                 for v2 in self.graphs[v0][v]:
                     smallpath = self.data.path[v][v2]
                     for j in range(len(smallpath) - 1):
-                        vs[vn('RouteEdge', self.data.v_index(v0),
+                        vs[vn('RoEd', self.data.v_index(v0),
                               self.data.v_index(smallpath[j]),
                               self.data.v_index(smallpath[j + 1]))] += 1
 
@@ -404,10 +384,10 @@ class CoolHeuristic:
             c = self.data.student_to_stop[s]
             v0 = stop_to_route[v]
             if grouped:
-                vs[vn('RouteStopCluster', self.data.v_index(v0),
+                vs[vn('RoStoCl', self.data.v_index(v0),
                       self.data.v_index(v), sorted(list(map(self.data.v_index, c))))] += 1
             else:
-                vs[vn('RouteStopStudent', self.data.v_index(v0),
+                vs[vn('RoSoSu', self.data.v_index(v0),
                       self.data.v_index(v), self.data.s_index(s))] = 1
         # pprint(vs)
         res = [varset, [vs[v] for v in varset]]

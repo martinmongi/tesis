@@ -3,7 +3,6 @@ from collections import Counter, defaultdict, deque
 from pprint import pprint
 from sys import argv
 from optparse import OptionParser
-from heuristics import insertion_precalc_wrapper
 from student_assignment import assign_students_mip
 from random import shuffle
 from union_find import UnionFind
@@ -20,6 +19,7 @@ parser.add_option("--of", dest="out_file")
 parser.add_option("--mtz", dest="mtz", action="store_true")
 parser.add_option("--dfj", dest="mtz", action="store_false")
 parser.add_option("--grouped", dest="grouped", action="store_true")
+parser.add_option("--heur", dest="heur", action="store_true")
 
 (options, args) = parser.parse_args()
 
@@ -28,23 +28,23 @@ data = ProblemData(options.in_file)
 
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
-problem.parameters.dettimelimit.set(1000000)
-problem.parameters.timelimit.set(600)
+# problem.parameters.dettimelimit.set(1000000)
+# problem.parameters.timelimit.set(600)
 
 
 variables = [
-    (vn('RouteEdge', data.v_index(v0), data.v_index(
+    (vn('RoEd', data.v_index(v0), data.v_index(
         v1), data.v_index(v2)), 'B', data.dist[v1][v2])
     for v0 in data.depots for v1 in data.stops for v2 in data.stops if v1 != v2] + \
-    [(vn('RouteStop', data.v_index(v0), data.v_index(v1)), 'B', 0)
+    [(vn('RoSto', data.v_index(v0), data.v_index(v1)), 'B', 0)
      for v0 in data.depots for v1 in data.stops[1:]] + \
-    [(vn('RouteActive', data.v_index(v0)), 'B', 0) for v0 in data.depots]
+    [(vn('RoA', data.v_index(v0)), 'B', 0) for v0 in data.depots]
 
 if options.grouped:
-    variables += [(vn('RouteStopCluster', data.v_index(v0), data.v_index(v1), sorted(list(map(data.v_index, c)))), 'I', 0)
+    variables += [(vn('RoStoCl', data.v_index(v0), data.v_index(v1), sorted(list(map(data.v_index, c)))), 'I', 0)
                   for v0 in data.depots for v1 in data.stops for c in data.stop_to_clusters[v1]]
 else:
-    variables += [(vn('RouteStopStudent', data.v_index(v0), data.v_index(v1), data.s_index(s)), 'B', 0)
+    variables += [(vn('RoStoStu', data.v_index(v0), data.v_index(v1), data.s_index(s)), 'B', 0)
                   for s in data.students for v0 in data.depots for v1 in data.student_to_stop[s]]
 
 if options.mtz:
@@ -62,9 +62,9 @@ rhs = [0 for v0 in data.depots for v in data.stops
 sense = ['E' for v0 in data.depots for v in data.stops
          if v not in [data.school, v0]]
 constraint = [[
-    [vn('RouteEdge', data.v_index(v0), data.v_index(v), data.v_index(v2))
+    [vn('RoEd', data.v_index(v0), data.v_index(v), data.v_index(v2))
      for v2 in data.stops if v != v2] +
-    [vn('RouteEdge', data.v_index(v0), data.v_index(v2), data.v_index(v))
+    [vn('RoEd', data.v_index(v0), data.v_index(v2), data.v_index(v))
      for v2 in data.stops if v != v2],
     [1 for v2 in data.stops if v != v2] +
     [-1 for v2 in data.stops if v != v2]
@@ -75,38 +75,38 @@ problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 rhs = [1 for v in data.stops]
 sense = ['L' for v in data.stops]
 constraint = [[
-    [vn('RouteEdge', data.v_index(v0), data.v_index(v), data.v_index(v2))
+    [vn('RoEd', data.v_index(v0), data.v_index(v), data.v_index(v2))
      for v0 in data.depots for v2 in data.stops if v != v2],
     [1 for v0 in data.depots for v2 in data.stops if v != v2]
 ] for v in data.stops]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-# outdeg - indeg = routeactive
-# All depots have 0 <= outdeg - indeg <= 1 in their own tours (constrainted by binarity of routeactive)
+# outdeg - indeg = RoA
+# All depots have 0 <= outdeg - indeg <= 1 in their own tours (constrainted by binarity of RoA)
 rhs = [0] * len(data.depots)
 sense = ['E'] * len(data.depots)
 constraint = [[
-    [vn('RouteEdge', data.v_index(v0), data.v_index(v0), data.v_index(v2))
+    [vn('RoEd', data.v_index(v0), data.v_index(v0), data.v_index(v2))
      for v2 in data.stops if v2 != v0] +
-    [vn('RouteEdge', data.v_index(v0), data.v_index(v2), data.v_index(v0))
+    [vn('RoEd', data.v_index(v0), data.v_index(v2), data.v_index(v0))
      for v2 in data.stops if v2 != v0] +
-    [vn('RouteActive', data.v_index(v0))],
+    [vn('RoA', data.v_index(v0))],
     [1 for v2 in data.stops if v2 != v0] +
     [-1 for v2 in data.stops if v2 != v0] +
     [-1]
 ] for v0 in data.depots]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-# outdeg - indeg = - routeactive
-# School has -1 <= outdeg - indeg <= 0 for all tours (constrained by binarity of routeactive)
+# outdeg - indeg = - RoA
+# School has -1 <= outdeg - indeg <= 0 for all tours (constrained by binarity of RoA)
 rhs = [0] * len(data.depots)
 sense = ['E'] * len(data.depots)
 constraint = [[
-    [vn('RouteEdge', data.v_index(v0), data.v_index(data.school), data.v_index(v2))
+    [vn('RoEd', data.v_index(v0), data.v_index(data.school), data.v_index(v2))
      for v2 in data.stops if v2 != data.school] +
-    [vn('RouteEdge', data.v_index(v0), data.v_index(v2), data.v_index(data.school))
+    [vn('RoEd', data.v_index(v0), data.v_index(v2), data.v_index(data.school))
      for v2 in data.stops if v2 != data.school] +
-    [vn('RouteActive', data.v_index(v0))],
+    [vn('RoA', data.v_index(v0))],
     [1 for v2 in data.stops if v2 != data.school] +
     [-1 for v2 in data.stops if v2 != data.school] +
     [1]
@@ -117,9 +117,9 @@ problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 rhs = [0 for v0 in data.depots for v in data.stops[1:]]
 sense = ['E' for v0 in data.depots for v in data.stops[1:]]
 constraint = [[
-    [vn('RouteEdge', data.v_index(v0), data.v_index(v), data.v_index(v2))
+    [vn('RoEd', data.v_index(v0), data.v_index(v), data.v_index(v2))
      for v2 in data.stops if v2 != v] +
-    [vn('RouteStop', data.v_index(v0), data.v_index(v))],
+    [vn('RoSto', data.v_index(v0), data.v_index(v))],
     [1 for v2 in data.stops if v2 != v] + [-1]
 ] for v0 in data.depots for v in data.stops[1:]]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
@@ -128,7 +128,7 @@ problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 rhs = [1 for v in data.stops[1:]]
 sense = ['L' for v in data.stops[1:]]
 constraint = [[
-    [vn('RouteStop', data.v_index(v0), data.v_index(v)) for v0 in data.depots],
+    [vn('RoSto', data.v_index(v0), data.v_index(v)) for v0 in data.depots],
     [1 for v0 in data.depots]
 ] for v in data.stops[1:]]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
@@ -138,7 +138,7 @@ if options.grouped:
     rhs = [data.clusters[c] for c in data.clusters]
     sense = ['E' for c in data.clusters]
     constraint = [[
-        [vn('RouteStopCluster', data.v_index(v0), data.v_index(
+        [vn('RoStoCl', data.v_index(v0), data.v_index(
             v1), sorted(list(map(data.v_index, c)))) for v0 in data.depots for v1 in c],
         [1 for v0 in data.depots for v1 in c]
     ] for c in data.clusters]
@@ -149,8 +149,8 @@ if options.grouped:
     sense = [
         'L' for v0 in data.depots for v1 in data.stops for c in data.stop_to_clusters[v1]]
     constraint = [[
-        [vn('RouteStopCluster', data.v_index(v0), data.v_index(v1), sorted(list(map(data.v_index, c)))),
-         vn('RouteStop', data.v_index(v0), data.v_index(v1))],
+        [vn('RoStoCl', data.v_index(v0), data.v_index(v1), sorted(list(map(data.v_index, c)))),
+         vn('RoSto', data.v_index(v0), data.v_index(v1))],
         [1, - data.clusters[c]]
     ] for v0 in data.depots for v1 in data.stops for c in data.stop_to_clusters[v1]]
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
@@ -159,7 +159,7 @@ if options.grouped:
     rhs = [data.capacity for v0 in data.depots]
     sense = ['L' for v0 in data.depots]
     constraint = [[
-        [vn('RouteStopCluster', data.v_index(v0), data.v_index(v1), sorted(list(map(data.v_index, c))))
+        [vn('RoStoCl', data.v_index(v0), data.v_index(v1), sorted(list(map(data.v_index, c))))
          for v1 in data.stops for c in data.stop_to_clusters[v1]],
         [1 for v1 in data.stops for c in data.stop_to_clusters[v1]]
     ] for v0 in data.depots]
@@ -169,7 +169,7 @@ else:
     rhs = [1 for s in data.students]
     sense = ['E' for s in data.students]
     constraint = [[
-        [vn('RouteStopStudent', data.v_index(v0), data.v_index(v1), data.s_index(s))
+        [vn('RoStoStu', data.v_index(v0), data.v_index(v1), data.s_index(s))
          for v0 in data.depots for v1 in data.student_to_stop[s]],
         [1 for v0 in data.depots for v1 in data.student_to_stop[s]],
     ] for s in data.students]
@@ -180,8 +180,8 @@ else:
     sense = [
         'L' for s in data.students for v0 in data.depots for v in data.student_to_stop[s]]
     constraint = [[
-        [vn('RouteStopStudent', data.v_index(v0), data.v_index(v), data.s_index(s)),
-         vn('RouteStop', data.v_index(v0), data.v_index(v))],
+        [vn('RoStoStu', data.v_index(v0), data.v_index(v), data.s_index(s)),
+         vn('RoSto', data.v_index(v0), data.v_index(v))],
         [1, -1]
     ] for s in data.students for v0 in data.depots for v in data.student_to_stop[s]]
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
@@ -190,7 +190,7 @@ else:
     rhs = [data.capacity for v0 in data.depots]
     sense = ['L' for v0 in data.depots]
     constraint = [[
-        [vn('RouteStopStudent', data.v_index(v0), data.v_index(v), data.s_index(s))
+        [vn('RoStoStu', data.v_index(v0), data.v_index(v), data.s_index(s))
          for s in data.students for v in data.student_to_stop[s]],
         [1 for s in data.students for v in data.student_to_stop[s]]
     ] for v0 in data.depots]
@@ -200,8 +200,8 @@ else:
 rhs = [0 for v in data.stops[1:] for v0 in data.depots]
 sense = ['G' for v in data.stops[1:] for v0 in data.depots]
 constraint = [[
-    [vn('RouteStop', data.v_index(v0), data.v_index(v)),
-     vn('RouteActive', data.v_index(v0))],
+    [vn('RoSto', data.v_index(v0), data.v_index(v)),
+     vn('RoA', data.v_index(v0))],
     [-1, 1]
 ] for v in data.stops[1:] for v0 in data.depots]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
@@ -224,7 +224,7 @@ if options.mtz:
         constraint = [[
             [vn('Rank', data.v_index(v0), data.v_index(j)),
              vn('Rank', data.v_index(v0), data.v_index(i)),
-             vn('RouteEdge', data.v_index(v0), data.v_index(i), data.v_index(j))],
+             vn('RoEd', data.v_index(v0), data.v_index(i), data.v_index(j))],
             [1, -1, -M]
         ] for i, j in gen]
         problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
@@ -240,7 +240,7 @@ else:
                   for v0 in data.depots}
             for vname in dsol:
                 sp = vname.split("_")
-                if sp[0] == 'RouteEdge':
+                if sp[0] == 'RoEd':
                     v0, i, j = map(int, sp[1:])
                     gs[v0][i].append(j)
 
@@ -253,7 +253,7 @@ else:
                         rhs = len(loop) - 1
                         sense = 'L'
                         constraint = [
-                            [vn('RouteEdge', data.v_index(v00), v1, v2)
+                            [vn('RoEd', data.v_index(v00), v1, v2)
                              for v1 in loop for v2 in loop if v1 != v2],
                             [1 for v1 in loop for v2 in loop if v1 != v2]
                         ]
@@ -273,13 +273,13 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
         edges_cost = defaultdict(lambda: defaultdict(lambda:{}))
         for vname in val_dict:
             sp = vname.split("_")
-            if sp[0] == 'RouteStop':
+            if sp[0] == 'RoSto':
                 v0, s = map(int, sp[1:])
                 stop_route[s].append((val_dict[vname], v0))
-            if sp[0] == 'RouteStopStudent':
+            if sp[0] == 'RoStoStu':
                 v0, s, st = map(int, sp[1:])
                 student_stop_route[st].append((val_dict[vname], v0, s))
-            if sp[0] == 'RouteEdge':
+            if sp[0] == 'RoEd':
                 v0, s1, s2 = map(int, sp[1:])
                 edges_cost[v0][s1][s2] = (1 - val_dict[vname]) * \
                     data.dist[data.vdictinv[s1]][data.vdictinv[s2]]
@@ -303,8 +303,8 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
                     best = v0
             stop_route_choice[s] = best
             if best is not None:
-                onvars.add(vn('RouteStop', best, s))
-                onvars.add(vn('RouteActive', best))
+                onvars.add(vn('RoSto', best, s))
+                onvars.add(vn('RoA', best))
                 routes[best][s] = None
         # pprint(stop_route_choice)
 
@@ -316,7 +316,7 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
                     highest = val
                     best = v0, s
             student_stop_route_choice[st] = best
-            onvars.add(vn('RouteStopStudent', best[0], best[1], st))
+            onvars.add(vn('RoStoStu', best[0], best[1], st))
         # pprint(student_stop_route_choice)
         # pprint(onvars)
 
@@ -349,7 +349,7 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
                 routes[v0][vi] = v
                 out_of_tour.remove(v)
             for k,v in routes[v0].items():
-                onvars.add(vn("RouteEdge",v0,k,v))
+                onvars.add(vn("RoEd",v0,k,v))
             # print(routes[v0])
 
         res = [[v[0] for v in variables], [
@@ -358,10 +358,10 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
 
 
 # problem.register_callback(NodeHeuristicCallback)
-
-heur = CoolHeuristic(data)
-sol = heur.precalc_varset([v[0] for v in variables], options.grouped)
-problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
+if options.heur:
+    heur = CoolHeuristic(data)
+    sol = heur.precalc_varset([v[0] for v in variables], options.grouped)
+    problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
 
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
@@ -373,11 +373,11 @@ gs = {v0: defaultdict(lambda: {}) for v0 in data.depots}
 assignment = {}
 for vname in dsol:
     sp = vname.split("_")
-    if sp[0] == 'RouteEdge':
+    if sp[0] == 'RoEd':
         v0, i, j = map(int, sp[1:])
         gs[data.vdictinv[v0]][data.vdictinv[i]][data.vdictinv[j]] = \
             data.path[data.vdictinv[i]][data.vdictinv[j]]
-    elif sp[0] == 'RouteStopStudent':
+    elif sp[0] == 'RoStoStu':
         v0, s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]
 

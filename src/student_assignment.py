@@ -48,7 +48,7 @@ def assign_students_mip(data, gs):
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
     problem.solve()
-    print("BEST OBJ: ", problem.solution.get_objective_value())
+    print("BEST STUDENT ASSIGNMENT WALKING DISTANCE: ", problem.solution.get_objective_value())
 
     sol = problem.solution.get_values()
     dsol = {variables[i][0]: sol[i] for i in range(len(sol)) if sol[i] > 0.5}
