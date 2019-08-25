@@ -197,13 +197,6 @@ constraint = [[
 ] for v in data.stops if v != data.school]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-# rhs = [data.capacity for v1 in data.stops if v1 != data.school]
-# sense = ['L' for v1 in data.stops if v1 != data.school]
-# constraint = [[
-#     [vn('StopLoad', data.v_index(v1))],
-#     [1]
-# ] for v1 in data.stops if v1 != data.school]
-
 # heur = CoolHeuristic(data)
 # sol = heur.flat_varset([v[0] for v in variables], options.grouped)
 # problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")

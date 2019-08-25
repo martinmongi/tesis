@@ -266,6 +266,8 @@ else:
 
 class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
     def __call__(self):
+
+        # Generamos diccionarios para obtener rapidamente las variables
         val_dict = {x[0][0]: x[1] for x in zip(variables, self.get_values())}
         # pprint(val_dict)
         stop_route = defaultdict(lambda: [])
@@ -284,6 +286,7 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
                 edges_cost[v0][s1][s2] = (1 - val_dict[vname]) * \
                     data.dist[data.vdictinv[s1]][data.vdictinv[s2]]
 
+        # Shuffleando para no tener sesgo hacia ciertas paradas/estudiantes
         for s in stop_route:
             shuffle(stop_route[s])
         for st in student_stop_route:
@@ -294,6 +297,9 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
         onvars = set()
         stop_route_choice = {}
         routes = defaultdict(lambda: {})
+        # De cada parada, elegimos la ruta que tenga mayor de asociación entre 
+        # ruta y parada. Si todas son 0, entonces la dejamos afuera. Al mismo
+        # tiempo, activamos las rutas
         for s in stop_route:
             highest = 0.0
             best = None
@@ -305,9 +311,14 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
             if best is not None:
                 onvars.add(vn('RoSto', best, s))
                 onvars.add(vn('RoA', best))
+                # Agrego la parada a la ruta, todavía no sabemos como se
+                # conectan
                 routes[best][s] = None
         # pprint(stop_route_choice)
 
+        # De cada estudiante, nos fijamos que combinación de parada y ruta tiene
+        # mayor valor, y la asignamos ahí
+        load = defaultdict(lambda : 0)
         student_stop_route_choice = {}
         for st in student_stop_route:
             highest = 0.0
@@ -317,11 +328,15 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
                     best = v0, s
             student_stop_route_choice[st] = best
             onvars.add(vn('RoStoStu', best[0], best[1], st))
+            load[best[0]] += 1
+            if load[best[0]] > data.capacity:
+                return
         # pprint(student_stop_route_choice)
         # pprint(onvars)
 
         # pprint(route_edges)
         school = data.v_index(data.school)
+        total_cost = 0
         for v0 in edges_cost:
             routes[v0][v0] = school
             # print(routes[v0])
@@ -350,11 +365,15 @@ class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
                 out_of_tour.remove(v)
             for k,v in routes[v0].items():
                 onvars.add(vn("RoEd",v0,k,v))
+                total_cost += data.dist[data.vdictinv[k]][data.vdictinv[v]]
+                if total_cost >= self.get_incumbent_objective_value():
+                    return
             # print(routes[v0])
 
         res = [[v[0] for v in variables], [
             1 if v[0] in onvars else 0 for v in variables]]
-        self.set_solution(res)
+        print(total_cost, self.get_incumbent_objective_value())
+        self.set_solution(res,objective_value=total_cost)
 
 
 # problem.register_callback(NodeHeuristicCallback)
