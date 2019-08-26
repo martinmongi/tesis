@@ -186,8 +186,7 @@ else:
         [1 for s in data.stop_to_students[v]] +
         [1 for v2 in data.stops if v2 != v] + [-1]
     ] for v in data.stops]
-    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
-                                   names=[vn('StopLoad', data.v_index(v)) for v in data.stops])
+    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
 rhs = [data.capacity for v in data.stops if v != data.school]
 sense = ['L' for v in data.stops if v != data.school]
@@ -212,7 +211,7 @@ problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
 sol = problem.solution.get_values()
 dsol = {variables[i][0]: sol[i] for i in range(len(sol)) if sol[i] > 0.5}
-pprint(dsol)
+# pprint(dsol)
 
 gs = {data.school: defaultdict(lambda: {})}
 assignment = {}
