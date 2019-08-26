@@ -3,6 +3,7 @@ from collections import Counter, defaultdict, deque
 from pprint import pprint
 from sys import argv
 from optparse import OptionParser
+# from heuristics import insertion_flat_wrapper
 from student_assignment import assign_students_mip
 from cool_heuristic import CoolHeuristic
 
@@ -15,6 +16,7 @@ parser = OptionParser()
 parser.add_option("--if", dest="in_file")
 parser.add_option("--of", dest="out_file")
 parser.add_option("--grouped", dest="grouped", action="store_true")
+parser.add_option("--heur", dest="heur", action="store_true")
 (options, args) = parser.parse_args()
 
 # INPUT
@@ -23,11 +25,14 @@ data = ProblemData(options.in_file)
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
 # problem.parameters.dettimelimit.set(1000000)
-# problem.parameters.timelimit.set(600)
+problem.parameters.timelimit.set(3600)
 # problem.parameters.mip.display.set(1)
 
 variables = [(vn('Edge', data.v_index(v1), data.v_index(v2)), 'B', data.dist[v1][v2])
              for v1 in data.stops for v2 in data.stops if v1 != v2] + \
+    [(vn('EdgeLoad', data.v_index(v1), data.v_index(v2)), 'C', 0)
+     for v1 in data.stops
+     for v2 in data.stops if v1 != v2] + \
     [(vn('Stop', data.v_index(v1)), 'B', 0)
      for v1 in data.stops[1:]] + \
     [(vn('StopLoad', data.v_index(v1)), 'C', 0)
@@ -126,32 +131,20 @@ if options.grouped:
     ] for v1 in data.stops for c in data.stop_to_clusters[v1]]
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-    # Stop Load minimum
+    # Load variables
     rhs = [0 for v in data.stops]
-    sense = ['G' for v in data.stops]
+    sense = ['E' for v in data.stops]
     constraint = [[
-        [vn('StopLoad', data.v_index(v))] +
-        [vn('StopCluster', data.v_index(v), sorted(list(map(data.v_index, c))))
-         for c in data.stop_to_clusters[v]],
-        [1] + [-1 for c in data.stop_to_clusters[v]]
-    ] for v in data.stops]
-    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
-
-    # Stop Loads binding
-    rhs = [-len(data.students)
-           for v in data.stops for v2 in data.stops if v != v2]
-    sense = ['G' for v in data.stops for v2 in data.stops if v !=
-             v2]
-    constraint = [[
-        [vn('StopLoad', data.v_index(v))] +
         [vn('StopCluster', data.v_index(v), sorted(list(map(data.v_index, c))))
          for c in data.stop_to_clusters[v]] +
-        [vn('StopLoad', data.v_index(v2)), vn(
-            'Edge', data.v_index(v2), data.v_index(v))],
-        [1] + [-1 for c in data.stop_to_clusters[v]] + [-1, -len(data.students)]
-    ] for v in data.stops for v2 in data.stops if v != v2]
-    
-    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+        [vn('EdgeLoad', data.v_index(v2), data.v_index(v))
+         for v2 in data.stops if v2 != v] +
+        [vn('StopLoad', data.v_index(v))],
+        [1 for c in data.stop_to_clusters[v]] +
+        [1 for v2 in data.stops if v2 != v] + [-1]
+    ] for v in data.stops]
+    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                                   names=[vn('StopLoad', data.v_index(v)) for v in data.stops])
 
 else:
     # Stop choices for each student add to 1
@@ -159,7 +152,7 @@ else:
     sense = ['E' for s in data.students]
     constraint = [[
         [vn('StopStudent', data.v_index(v1), data.s_index(s))
-         for v1 in data.student_to_stop[s]],
+        for v1 in data.student_to_stop[s]],
         [1 for v1 in data.student_to_stop[s]],
     ] for s in data.students]
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
@@ -169,7 +162,7 @@ else:
     sense = ['L' for s in data.students for v in data.student_to_stop[s]]
     constraint = [[
         [vn('StopStudent', data.v_index(v), data.s_index(s)),
-         vn('Stop', data.v_index(v))],
+        vn('Stop', data.v_index(v))],
         [1, -1]
     ] for s in data.students for v in data.student_to_stop[s]]
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
@@ -179,26 +172,47 @@ else:
     sense = ['E' for v in data.stops]
     constraint = [[
         [vn('StopStudent', data.v_index(v), data.s_index(s))
-         for s in data.stop_to_students[v]] +
+        for s in data.stop_to_students[v]] +
         [vn('EdgeLoad', data.v_index(v2), data.v_index(v))
-         for v2 in data.stops if v2 != v] +
+        for v2 in data.stops if v2 != v] +
         [vn('StopLoad', data.v_index(v))],
         [1 for s in data.stop_to_students[v]] +
         [1 for v2 in data.stops if v2 != v] + [-1]
     ] for v in data.stops]
-    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
+                                names=[vn('StopLoad', data.v_index(v)) for v in data.stops])
 
-rhs = [data.capacity for v in data.stops if v != data.school]
-sense = ['L' for v in data.stops if v != data.school]
+rhss = []
+senses = []
+constraints = []
+
+for v1 in data.stops:
+    for v2 in data.stops:
+        if v1 == v2:
+            continue
+        rhs, sense, constraint = old_product_constraints(
+            vn('EdgeLoad', data.v_index(v1), data.v_index(v2)),
+            vn('Edge', data.v_index(v1), data.v_index(v2)),
+            vn('StopLoad', data.v_index(v1)),
+            len(data.students)
+        )
+        rhss += rhs
+        senses += sense
+        constraints += constraint
+problem.linear_constraints.add(lin_expr=constraints, senses=senses, rhs=rhss)
+
+rhs = [data.capacity for v1 in data.stops for v2 in data.stops if v1 != v2]
+sense = ['L' for v1 in data.stops for v2 in data.stops if v1 != v2]
 constraint = [[
-    [vn('StopLoad', data.v_index(v))],
+    [vn('EdgeLoad', data.v_index(v1), data.v_index(v2))],
     [1]
-] for v in data.stops if v != data.school]
+] for v1 in data.stops for v2 in data.stops if v1 != v2]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-# heur = CoolHeuristic(data)
-# sol = heur.flat_varset([v[0] for v in variables], options.grouped)
-# problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
+if options.heur:
+    heur = CoolHeuristic(data)
+    sol = heur.flat_varset([v[0] for v in variables], options.grouped)
+    problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
 
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())
@@ -220,12 +234,10 @@ for vname in dsol:
         s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]
 
-# pprint(gs)
-
 for r in gs:
     v = r
     while v != data.school:
-        nxt, val = gs[data.school][v].popitem()
+        nxt,val = gs[data.school][v].popitem()
         gs[r][v][nxt] = val
         v = nxt
 del gs[data.school]
