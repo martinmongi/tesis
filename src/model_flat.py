@@ -15,6 +15,7 @@ parser = OptionParser()
 parser.add_option("--if", dest="in_file")
 parser.add_option("--of", dest="out_file")
 parser.add_option("--grouped", dest="grouped", action="store_true")
+parser.add_option("--heur", dest="heur", action="store_true")
 (options, args) = parser.parse_args()
 
 # INPUT
@@ -207,9 +208,10 @@ constraint = [[
 ] for v in data.stops if v != data.school]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-# heur = CoolHeuristic(data)
-# sol = heur.flat_varset([v[0] for v in variables], options.grouped)
-# problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
+if options.heur:
+    heur = CoolHeuristic(data)
+    sol = heur.flat_varset([v[0] for v in variables], options.grouped)
+    problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
 
 problem.solve()
 print("BEST OBJ: ", problem.solution.get_objective_value())

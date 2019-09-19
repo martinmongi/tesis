@@ -18,6 +18,7 @@ parser.add_option("--of", dest="out_file")
 parser.add_option("--grouped", dest="grouped", action="store_true")
 parser.add_option("--optcut", dest="optcut", action="store_true")
 parser.add_option("--heur", dest="heur", action="store_true")
+parser.add_option("--flow", dest="flow",action="store_true")
 (options, args) = parser.parse_args()
 
 # INPUT
@@ -25,13 +26,19 @@ data = ProblemData(options.in_file)
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
 # problem.parameters.dettimelimit.set(1000000)
-# problem.parameters.timelimit.set(600)
+problem.parameters.timelimit.set(3600)
+problem.parameters.workmem.set(20000)
 
 variables = [(vn('RoEd', data.v_index(v0), data.v_index(v1), data.v_index(v2)), 'I', data.original_graph[v1][v2][0])
              for v0 in data.depots for v1 in data.original_graph for v2 in data.original_graph[v1]] + \
     [(vn('RoSto', data.v_index(v0), data.v_index(v1)), 'B', 0)
      for v0 in data.depots for v1 in data.stops[1:]] + \
     [(vn('RoA', data.v_index(v0)), 'B', 0) for v0 in data.depots]
+
+if True:
+    variables += [(vn('RoEdFlo', data.v_index(v0), data.v_index(v1), data.v_index(v2)), 'C', 0)
+     for v0 in data.depots for v1 in data.original_graph for v2 in data.original_graph[v1]]
+    
 
 if options.grouped:
     variables += [(vn('RoStoCl', data.v_index(v0), data.v_index(v1),
@@ -45,7 +52,8 @@ problem.variables.add(obj=[v[2] for v in variables],
                       types=[v[1] for v in variables],
                       names=[v[0] for v in variables])
 
-if options.optcut:
+if True:
+    print("USANDO CORTES ÓPTIMOS DE FLUJO MÁXIMO")
     # Upper bound on edges
     rhs = [data.edge_max_flow[v1, v2]
         for v1 in data.original_graph
@@ -218,75 +226,115 @@ constraint = [[
 ] for v in data.stops[1:] for v0 in data.depots]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-times = 0
+if True:
+    # Edge can´t have flow if it´s not active
+    rhs = [0 for v0 in data.depots for v1 in data.original_graph
+        for v2 in data.original_graph[v1]]
+    sense = ['G' for v0 in data.depots for v1 in data.original_graph
+            for v2 in data.original_graph[v1]]
+    constraint = [[
+        [vn('RoEd', data.v_index(v0), data.v_index(v1), data.v_index(v2)),
+        vn('RoEdFlo', data.v_index(v0), data.v_index(v1), data.v_index(v2))],
+        [len(data.stops), -1]
+    ] for v0 in data.depots for v1 in data.original_graph
+        for v2 in data.original_graph[v1]]
+    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-class SubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCallback):
-    def __call__(self):
-        global times
+    rhs = [0 for v0 in data.depots]
+    sense = ['E' for v0 in data.depots]
+    constraint = [[
+        [vn('RoEdFlo', data.v_index(v0), data.v_index(v0), data.v_index(v2)) for v2 in data.original_graph[v0]] +
+        [vn('RoEdFlo', data.v_index(v0), data.v_index(v2), data.v_index(v0)) for v2 in data.reverse_original_graph[v0]] +
+        [vn('RoSto', data.v_index(v0), data.v_index(v)) for v in data.stops[1:]] +
+        [vn('RoA', data.v_index(v0))],
+        [1 for v2 in data.original_graph[v0]] +
+        [-1 for v2 in data.reverse_original_graph[v0]] +
+        [-1 for v in data.stops[1:]] +
+        [1]
+    ] for v0 in data.depots]
+    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-        sols = self.get_values()
-        dsol = {variables[i][0]: sols[i]
-                for i in range(len(sols)) if sols[i] > 0.5}
-        gs = {data.v_index(v0): defaultdict(lambda: []) for v0 in data.depots}
-        for vname in dsol:
-            sp = vname.split("_")
-            if sp[0] == 'RoEd':
-                v0, i, j = map(int, sp[1:])
-                gs[v0][i].append(j)
+    for v0 in data.depots:
+        rhs = [0 for v in data.stops[1:] if v != v0]
+        sense = ['E' for v in data.stops[1:] if v != v0]
+        constraint = [[
+            [vn('RoEdFlo', data.v_index(v0), data.v_index(v), data.v_index(v2)) for v2 in data.original_graph[v]] +
+            [vn('RoEdFlo', data.v_index(v0), data.v_index(v2), data.v_index(v)) for v2 in data.reverse_original_graph[v]] +
+            [vn('RoSto', data.v_index(v0), data.v_index(v))],
+            [1 for v2 in data.original_graph[v]] +
+            [-1 for v2 in data.reverse_original_graph[v]] +
+            [1]
+        ] for v in data.stops[1:] if v != v0]
+        problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-        sloops = []
-        for v0, g in gs.items():
-            main_tour = bfs(g, v0)
-            loops = set([v for v in g]).difference(main_tour)
-            while len(loops) > 0:
-                loop = bfs(g, loops.pop())
-                sloops.append(loop)
-                loops.difference_update(loop)
-        # print(sloops)
-        for loop in sloops:
-            # print(loop)
-            for v in loop:
-                if data.vdictinv[v] not in data.stops:
-                    continue
-                for v0 in data.depots:
-                    rhs = 0
-                    sense = 'G'
-                    constraint = [
-                        [vn('RoEd', data.v_index(v0), v1, data.v_index(v2))
-                         for v1 in loop for v2 in data.original_graph[data.vdictinv[v1]]
-                         if data.v_index(v2) not in loop] +
-                        [vn('RoSto', data.v_index(v0), v)],
-                        [1 for v1 in loop for v2 in data.original_graph[data.vdictinv[v1]]
-                         if data.v_index(v2) not in loop] + [-1]
-                    ]
-                    times += 1
-                    if times % 100 == 0:
-                        print("CONSTRAINT", times)
-                    # print(constraint)
-                    self.add(constraint=constraint,
-                             sense=sense,
-                             rhs=rhs)
-            # for v0 in data.depots:
-            #     rhs = 0
-            #     sense = 'G'
-            #     constraint = [
-            #         [vn('RoEd', data.v_index(v0), v1, data.v_index(v2))
-            #             for v1 in loop for v2 in data.original_graph[data.vdictinv[v1]]
-            #             if data.v_index(v2) not in loop] +
-            #         [vn('RoSto', data.v_index(v0), v) for v in loop if data.vdictinv[v] in data.stops],
-            #         [len([v for v in loop if data.vdictinv[v] in data.stops]) for v1 in loop for v2 in data.original_graph[data.vdictinv[v1]]
-            #             if data.v_index(v2) not in loop] + [-1 for v in loop if data.vdictinv[v] in data.stops]
-            #     ]
-            #     times += 1
-            #     if times % 100 == 0:
-            #         print("CONSTRAINT", times)
-            #     # print(constraint)
-            #     self.add(constraint=constraint,
-            #                 sense=sense,
-            #                 rhs=rhs)
+    rhs = [0 for v in data.original_graph if v not in data.stops for v0 in data.depots]
+    sense = ['E' for v in data.original_graph if v not in data.stops for v0 in data.depots]
+    constraint = [[
+        [vn('RoEdFlo', data.v_index(v0), data.v_index(v), data.v_index(v2)) for v2 in data.original_graph[v]] +
+        [vn('RoEdFlo', data.v_index(v0), data.v_index(v2), data.v_index(v)) for v2 in data.reverse_original_graph[v]],
+        [1 for v2 in data.original_graph[v]] +
+        [-1 for v2 in data.reverse_original_graph[v]]
+    ] for v in data.original_graph if v not in data.stops for v0 in data.depots]
+    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+
+    # rhs = [0 for v0 in data.depots]
+    # sense = ["E" for v0 in data.depots]
+    # constraint =[[
+    #     [vn('RoEdFlo', data.v_index(v0), data.v_index(data.school), data.v_index(v2)) for v2 in data.original_graph[data.school]] +
+    #     [vn('RoEdFlo', data.v_index(v0), data.v_index(v2), data.v_index(data.school)) for v2 in data.reverse_original_graph[data.school]] +
+    #     [vn('RoSto', data.v_index(v0), data.v_index(v)) for v in data.stops[1:]],
+    #     [1 for v2 in data.original_graph[data.school]] +
+    #     [-1 for v2 in data.reverse_original_graph[data.school]] +
+    #     [1 for v in data.stops[1:]]
+    # ] for v0 in data.depots]
+    # problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+
+else:
+    class SubToursLazyConstraintCallback(cplex.callbacks.LazyConstraintCallback):
+        def __call__(self):
+            global times
+
+            sols = self.get_values()
+            dsol = {variables[i][0]: sols[i]
+                    for i in range(len(sols)) if sols[i] > 0.5}
+            gs = {data.v_index(v0): defaultdict(lambda: []) for v0 in data.depots}
+            for vname in dsol:
+                sp = vname.split("_")
+                if sp[0] == 'RoEd':
+                    v0, i, j = map(int, sp[1:])
+                    gs[v0][i].append(j)
+
+            sloops = []
+            for v0, g in gs.items():
+                main_tour = bfs(g, v0)
+                loops = set([v for v in g]).difference(main_tour)
+                while len(loops) > 0:
+                    loop = bfs(g, loops.pop())
+                    sloops.append(loop)
+                    loops.difference_update(loop)
+            # print(sloops)
+            for loop in sloops:
+                # print(loop)
+                for v in loop:
+                    if data.vdictinv[v] not in data.stops:
+                        continue
+                    for v0 in data.depots:
+                        rhs = 0
+                        sense = 'G'
+                        constraint = [
+                            [vn('RoEd', data.v_index(v0), v1, data.v_index(v2))
+                            for v1 in loop for v2 in data.original_graph[data.vdictinv[v1]]
+                            if data.v_index(v2) not in loop] +
+                            [vn('RoSto', data.v_index(v0), v)],
+                            [1 for v1 in loop for v2 in data.original_graph[data.vdictinv[v1]]
+                            if data.v_index(v2) not in loop] + [-1]
+                        ]
+                        self.add(constraint=constraint,
+                                sense=sense,
+                                rhs=rhs)
 
 
-problem.register_callback(SubToursLazyConstraintCallback)
+    problem.register_callback(SubToursLazyConstraintCallback)
 
 if options.heur:
     heur = CoolHeuristic(data)

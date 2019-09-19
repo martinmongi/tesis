@@ -31,9 +31,10 @@ if options.graph:
         plt.xticks([])
         plt.yticks([])
 
-data = ProblemData(options.in_file)
-plt.plot([s[0] * 1000 for s in data.students],
-         [s[1] * 1000 for s in data.students], 'b.', label="Estudiantes")
+if options.in_file:
+    data = ProblemData(options.in_file)
+    plt.plot([s[0] * 1000 for s in data.students],
+            [s[1] * 1000 for s in data.students], 'b.', label="Estudiantes")
 
 if options.out_file:
     with open(options.out_file, 'r') as f:
@@ -49,22 +50,23 @@ if options.out_file:
             g = eval(ls[i])
             for v1 in g:
                 for v2 in g[v1]:
-                    # plt.plot([p[0] * 1000 for p in g[v1][v2]],
-                    #          [p[1] * 1000 for p in g[v1][v2]],
-                    #          color=COLORS[i % len(COLORS)])
-                    plt.plot([g[v1][v2][0][0] * 1000, g[v1][v2][-1][0] * 1000],
-                             [g[v1][v2][0][1] * 1000, g[v1][v2][-1][1] * 1000],
+                    plt.plot([p[0] * 1000 for p in g[v1][v2]],
+                             [p[1] * 1000 for p in g[v1][v2]],
                              color=COLORS[i % len(COLORS)])
+                    # plt.plot([g[v1][v2][0][0] * 1000, g[v1][v2][-1][0] * 1000],
+                    #          [g[v1][v2][0][1] * 1000, g[v1][v2][-1][1] * 1000],
+                    #          color=COLORS[i % len(COLORS)])
 
-plt.plot([data.stops[0][0] * 1000],
-         [data.stops[0][1] * 1000], 'gh', markersize=10, label="Escuela")
-plt.plot([dep[0] * 1000 for dep in data.depots],
-         [dep[1] * 1000 for dep in data.depots], 'g^', markersize=10, label="Garages")
-plt.plot([s[0] * 1000 for s in data.stops[1:] if s not in data.depots],
-         [s[1] * 1000 for s in data.stops[1:] if s not in data.depots], 'ro', label="Paradas")
-for s in data.stops:
-    plt.text(s[0] * 1000, s[1] * 1000, data.v_index(s), fontsize=6,
-             horizontalalignment='center', verticalalignment='center')
+if options.in_file:
+    plt.plot([data.stops[0][0] * 1000],
+            [data.stops[0][1] * 1000], 'gh', markersize=10, label="Escuela")
+    plt.plot([dep[0] * 1000 for dep in data.depots],
+            [dep[1] * 1000 for dep in data.depots], 'g^', markersize=10, label="Garages")
+    plt.plot([s[0] * 1000 for s in data.stops[1:] if s not in data.depots],
+            [s[1] * 1000 for s in data.stops[1:] if s not in data.depots], 'ro', label="Paradas")
+    for s in data.stops:
+        plt.text(s[0] * 1000, s[1] * 1000, data.v_index(s), fontsize=6,
+                horizontalalignment='center', verticalalignment='center')
 plt.legend()
 
 fn = options.out_file if options.out_file else (

@@ -29,7 +29,8 @@ data = ProblemData(options.in_file)
 problem = cplex.Cplex()
 problem.objective.set_sense(problem.objective.sense.minimize)
 # problem.parameters.dettimelimit.set(1000000)
-# problem.parameters.timelimit.set(600)
+problem.parameters.timelimit.set(3600)
+problem.parameters.workmem.set(20000)
 
 
 variables = [
@@ -47,7 +48,7 @@ else:
     variables += [(vn('RoStoStu', data.v_index(v0), data.v_index(v1), data.s_index(s)), 'B', 0)
                   for s in data.students for v0 in data.depots for v1 in data.student_to_stop[s]]
 
-if options.mtz:
+if True:
     variables += [(vn('Rank', data.v_index(v0), data.v_index(v)), 'C', 0)
                   for v0 in data.depots for v in data.stops]
 
@@ -206,7 +207,7 @@ constraint = [[
 ] for v in data.stops[1:] for v0 in data.depots]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-if options.mtz:
+if True:
     for v0 in data.depots:
         # Depots have rank 1
         rhs = [1]
