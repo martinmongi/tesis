@@ -240,6 +240,7 @@ if True:
         for v2 in data.original_graph[v1]]
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
+    # The depots have outflow equal to the number of stops to serve, minus 1
     rhs = [0 for v0 in data.depots]
     sense = ['E' for v0 in data.depots]
     constraint = [[
@@ -254,18 +255,17 @@ if True:
     ] for v0 in data.depots]
     problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-    for v0 in data.depots:
-        rhs = [0 for v in data.stops[1:] if v != v0]
-        sense = ['E' for v in data.stops[1:] if v != v0]
-        constraint = [[
-            [vn('RoEdFlo', data.v_index(v0), data.v_index(v), data.v_index(v2)) for v2 in data.original_graph[v]] +
-            [vn('RoEdFlo', data.v_index(v0), data.v_index(v2), data.v_index(v)) for v2 in data.reverse_original_graph[v]] +
-            [vn('RoSto', data.v_index(v0), data.v_index(v))],
-            [1 for v2 in data.original_graph[v]] +
-            [-1 for v2 in data.reverse_original_graph[v]] +
-            [1]
-        ] for v in data.stops[1:] if v != v0]
-        problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
+    rhs = [0 for v in data.stops[1:] for v0 in data.depots if v != v0]
+    sense = ['E' for v in data.stops[1:] for v0 in data.depots if v != v0]
+    constraint = [[
+        [vn('RoEdFlo', data.v_index(v0), data.v_index(v), data.v_index(v2)) for v2 in data.original_graph[v]] +
+        [vn('RoEdFlo', data.v_index(v0), data.v_index(v2), data.v_index(v)) for v2 in data.reverse_original_graph[v]] +
+        [vn('RoSto', data.v_index(v0), data.v_index(v))],
+        [1 for v2 in data.original_graph[v]] +
+        [-1 for v2 in data.reverse_original_graph[v]] +
+        [1]
+    ] for v in data.stops[1:] for v0 in data.depots if v != v0]
+    problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
     rhs = [0 for v in data.original_graph if v not in data.stops for v0 in data.depots]
     sense = ['E' for v in data.original_graph if v not in data.stops for v0 in data.depots]
