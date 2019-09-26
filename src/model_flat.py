@@ -26,6 +26,8 @@ problem.objective.set_sense(problem.objective.sense.minimize)
 # problem.parameters.dettimelimit.set(1000000)
 # problem.parameters.timelimit.set(600)
 # problem.parameters.mip.display.set(1)
+problem.parameters.timelimit.set(3600)
+problem.parameters.workmem.set(20000)
 
 variables = [(vn('Edge', data.v_index(v1), data.v_index(v2)), 'B', data.dist[v1][v2])
              for v1 in data.stops for v2 in data.stops if v1 != v2] + \
