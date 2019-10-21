@@ -20,6 +20,7 @@ parser.add_option("--mtz", dest="mtz", action="store_true")
 parser.add_option("--dfj", dest="mtz", action="store_false")
 parser.add_option("--grouped", dest="grouped", action="store_true")
 parser.add_option("--heur", dest="heur", action="store_true")
+parser.add_option("--nodeheur", dest="node_heur", action="store_true")
 
 (options, args) = parser.parse_args()
 
@@ -41,7 +42,7 @@ variables = [
      for v0 in data.depots for v1 in data.stops[1:]] + \
     [(vn('RoA', data.v_index(v0)), 'B', 0) for v0 in data.depots]
 
-if options.grouped:
+if True:
     variables += [(vn('RoStoCl', data.v_index(v0), data.v_index(v1), sorted(list(map(data.v_index, c)))), 'I', 0)
                   for v0 in data.depots for v1 in data.stops for c in data.stop_to_clusters[v1]]
 else:
@@ -134,7 +135,7 @@ constraint = [[
 ] for v in data.stops[1:]]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-if options.grouped:
+if True:
     # Cluster choices add to cluster size
     rhs = [data.clusters[c] for c in data.clusters]
     sense = ['E' for c in data.clusters]
@@ -264,123 +265,140 @@ else:
                     loops.difference_update(loop)
     problem.register_callback(SubToursLazyConstraintCallback)
 
+if options.node_heur:
+    class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
+        def __call__(self):
 
-class NodeHeuristicCallback(cplex.callbacks.HeuristicCallback):
-    def __call__(self):
+            # Generamos diccionarios para obtener rapidamente las variables
+            val_dict = {x[0][0]: x[1]
+                        for x in zip(variables, self.get_values())}
+            # pprint(val_dict)
+            stop_route = defaultdict(lambda: [])
+            student_stop_route = defaultdict(lambda: [])
+            edges_cost = defaultdict(lambda: defaultdict(lambda: {}))
+            for vname in val_dict:
+                sp = vname.split("_")
+                if sp[0] == 'RoSto':
+                    v0, s = map(int, sp[1:])
+                    stop_route[s].append((val_dict[vname], v0))
+                if sp[0] == 'RoStoStu':
+                    v0, s, st = map(int, sp[1:])
+                    student_stop_route[st].append((val_dict[vname], v0, s))
+                if sp[0] == 'RoEd':
+                    v0, s1, s2 = map(int, sp[1:])
+                    edges_cost[v0][s1][s2] = (1 - val_dict[vname]) * \
+                        data.dist[data.vdictinv[s1]][data.vdictinv[s2]]
 
-        # Generamos diccionarios para obtener rapidamente las variables
-        val_dict = {x[0][0]: x[1] for x in zip(variables, self.get_values())}
-        # pprint(val_dict)
-        stop_route = defaultdict(lambda: [])
-        student_stop_route = defaultdict(lambda: [])
-        edges_cost = defaultdict(lambda: defaultdict(lambda:{}))
-        for vname in val_dict:
-            sp = vname.split("_")
-            if sp[0] == 'RoSto':
-                v0, s = map(int, sp[1:])
-                stop_route[s].append((val_dict[vname], v0))
-            if sp[0] == 'RoStoStu':
-                v0, s, st = map(int, sp[1:])
-                student_stop_route[st].append((val_dict[vname], v0, s))
-            if sp[0] == 'RoEd':
-                v0, s1, s2 = map(int, sp[1:])
-                edges_cost[v0][s1][s2] = (1 - val_dict[vname]) * \
-                    data.dist[data.vdictinv[s1]][data.vdictinv[s2]]
+            # Shuffleando para no tener sesgo hacia ciertas paradas/estudiantes
+            for s in stop_route:
+                shuffle(stop_route[s])
+            for st in student_stop_route:
+                shuffle(student_stop_route[st])
+            # pprint(stop_route)
+            # pprint(student_stop_route)
 
-        # Shuffleando para no tener sesgo hacia ciertas paradas/estudiantes
-        for s in stop_route:
-            shuffle(stop_route[s])
-        for st in student_stop_route:
-            shuffle(student_stop_route[st])
-        # pprint(stop_route)
-        # pprint(student_stop_route)
+            rvars = defaultdict(lambda: 0)
+            stop_route_choice = {}
+            routes = defaultdict(lambda: {})
+            # De cada parada, elegimos la ruta que tenga mayor de asociación entre
+            # ruta y parada. Si todas son 0, entonces la dejamos afuera. Al mismo
+            # tiempo, activamos las rutas
+            for s in stop_route:
+                highest = 0.0
+                best = None
+                for val, v0 in stop_route[s]:
+                    if val > highest:
+                        highest = val
+                        best = v0
+                stop_route_choice[s] = best
+                if best is not None:
+                    rvars[vn('RoSto', best, s)] = 1
+                    rvars[vn('RoA', best)] = 1
+                    # Agrego la parada a la ruta, todavía no sabemos como se
+                    # conectan
+                    routes[best][s] = None
+            # pprint(stop_route_choice)
+            # pprint(rvars)
+            # pprint(routes)
 
-        onvars = set()
-        stop_route_choice = {}
-        routes = defaultdict(lambda: {})
-        # De cada parada, elegimos la ruta que tenga mayor de asociación entre 
-        # ruta y parada. Si todas son 0, entonces la dejamos afuera. Al mismo
-        # tiempo, activamos las rutas
-        for s in stop_route:
-            highest = 0.0
-            best = None
-            for val, v0 in stop_route[s]:
-                if val > highest:
-                    highest = val
-                    best = v0
-            stop_route_choice[s] = best
-            if best is not None:
-                onvars.add(vn('RoSto', best, s))
-                onvars.add(vn('RoA', best))
-                # Agrego la parada a la ruta, todavía no sabemos como se
-                # conectan
-                routes[best][s] = None
-        # pprint(stop_route_choice)
-
-        # De cada estudiante, nos fijamos que combinación de parada y ruta tiene
-        # mayor valor, y la asignamos ahí
-        load = defaultdict(lambda : 0)
-        student_stop_route_choice = {}
-        for st in student_stop_route:
-            highest = 0.0
-            for val, v0, s in student_stop_route[st]:
-                if val > highest and stop_route_choice[s] == v0:
-                    highest = val
-                    best = v0, s
-            student_stop_route_choice[st] = best
-            onvars.add(vn('RoStoStu', best[0], best[1], st))
-            load[best[0]] += 1
-            if load[best[0]] > data.capacity:
-                return
-        # pprint(student_stop_route_choice)
-        # pprint(onvars)
-
-        # pprint(route_edges)
-        school = data.v_index(data.school)
-        total_cost = 0
-        for v0 in edges_cost:
-            routes[v0][v0] = school
-            # print(routes[v0])
-            out_of_tour = set(routes[v0].keys())
-            out_of_tour.difference_update([v0])
-            # print(out_of_tour)
-
-            while len(out_of_tour) > 0:
-                best = (float('+inf'),0,0)
-                for v in out_of_tour:
-                    vi = v0
-                    while vi != school:
-                        vnext = routes[v0][vi] 
-                        new_cost = (
-                            edges_cost[v0][vi][v] + edges_cost[v0][v][vnext] - edges_cost[v0][v][vnext],
-                            vi,v)
-                        # print(new_cost)
-                        best = min(best,new_cost)
-                        vi = routes[v0][vi]
+            # De cada estudiante, nos fijamos que combinación de parada y ruta tiene
+            # mayor valor, y la asignamos ahí
+            load = defaultdict(lambda: 0)
+            student_stop_route_choice = {}
+            for st in student_stop_route:
+                # print(st, student_stop_route[st])
+                highest = -0.1
+                for val, v0, s in student_stop_route[st]:
+                    # print(val, v0, s)
+                    if val > highest and stop_route_choice[s] == v0:
+                        highest = val
+                        best = (v0, s)
                 # print(best)
-                _,vi,v = best
-                vnext = routes[v0][vi]
-                # print("AGREGO", v, "DESPUES DE", vi, "ANTES DE", vnext)
-                routes[v0][v] = vnext
-                routes[v0][vi] = v
-                out_of_tour.remove(v)
-            for k,v in routes[v0].items():
-                onvars.add(vn("RoEd",v0,k,v))
-                total_cost += data.dist[data.vdictinv[k]][data.vdictinv[v]]
-                if total_cost >= self.get_incumbent_objective_value():
+                student_stop_route_choice[st] = best
+                # print(student_stop_route_choice)
+                rvars[vn('RoStoStu', best[0], best[1], st)] = 1
+                load[best[0]] += 1
+                if load[best[0]] > data.capacity:
                     return
-            # print(routes[v0])
+            # pprint(student_stop_route_choice)
+            # pprint(onvars)
 
-        res = [[v[0] for v in variables], [
-            1 if v[0] in onvars else 0 for v in variables]]
-        print(total_cost, self.get_incumbent_objective_value())
-        self.set_solution(res,objective_value=total_cost)
+            # pprint(route_edges)
+            school = data.v_index(data.school)
+            total_cost = 0
+            rank = defaultdict(lambda: 0)
+            for v0 in edges_cost:
+                routes[v0][v0] = school
+                # print(routes[v0])
+                out_of_tour = set(routes[v0].keys())
+                out_of_tour.difference_update([v0])
+                # print(out_of_tour)
+
+                while len(out_of_tour) > 0:
+                    best = (float('+inf'), 0, 0)
+                    for v in out_of_tour:
+                        vi = v0
+                        while vi != school:
+                            vnext = routes[v0][vi]
+                            new_cost = (
+                                edges_cost[v0][vi][v] + edges_cost[v0][v][vnext] -
+                                edges_cost[v0][v][vnext],
+                                vi, v)
+                            # print(new_cost)
+                            best = min(best, new_cost)
+                            vi = routes[v0][vi]
+                    # print(best)
+                    _, vi, v = best
+                    vnext = routes[v0][vi]
+                    # print("AGREGO", v, "DESPUES DE", vi, "ANTES DE", vnext)
+                    routes[v0][v] = vnext
+                    routes[v0][vi] = v
+                    out_of_tour.remove(v)
+
+                rvars[vn('Rank', v0, v0)] = 1
+                v = v0
+                while v != data.v_index(data.school):
+                    rvars[vn("RoEd", v0, v, routes[v0][v])] = 1
+                    rvars[vn('Rank', v0, routes[v0][v])
+                          ] = rvars[vn('Rank', v0, v)] + 1
+                    total_cost += data.dist[data.vdictinv[v]
+                                            ][data.vdictinv[routes[v0][v]]]
+                    if total_cost >= self.get_incumbent_objective_value()-.01:
+                        return
+                    v = routes[v0][v]
+                # print(v0, routes[v0])
+
+            # pprint(rvars)
+            res = [[v[0] for v in variables], [
+                rvars[v[0]] for v in variables]]
+            print(total_cost, self.get_incumbent_objective_value())
+            self.set_solution(res, objective_value=total_cost)
+    problem.register_callback(NodeHeuristicCallback)
 
 
-# problem.register_callback(NodeHeuristicCallback)
 if options.heur:
     heur = CoolHeuristic(data)
-    sol = heur.precalc_varset([v[0] for v in variables], options.grouped)
+    sol = heur.precalc_varset([v[0] for v in variables], True)
     problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
 
 problem.solve()
@@ -395,13 +413,13 @@ for vname in dsol:
     sp = vname.split("_")
     if sp[0] == 'RoEd':
         v0, i, j = map(int, sp[1:])
-        gs[data.vdictinv[v0]][data.vdictinv[i]][data.vdictinv[j]] = \
-            data.path[data.vdictinv[i]][data.vdictinv[j]]
+        gs[data.vdictinv[v0]][data.vdictinv[i]][data.vdictinv[j]
+                                                ] = data.path[data.vdictinv[i]][data.vdictinv[j]]
     elif sp[0] == 'RoStoStu':
         v0, s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]
 
-if options.grouped:
+if True:
     assignment = assign_students_mip(data, gs)
 
 data.add_solution(assignment, gs)

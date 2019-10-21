@@ -27,6 +27,8 @@ class ProblemData:
             self.create_sdict()
             self.max_walk_dist = eval(ls[3])
             self.create_student_stop_dicts()
+            d = [len(sss) for s,sss in self.student_to_stop.items()]
+            print("                  ", sum(d)/len(d), "OPCIONES PROMEDIO DE PARADAS POR ESTUDIANTE")
             self.depots = eval(ls[4])
             self.capacity = eval(ls[5])
             print("                  ", len(self.depots),

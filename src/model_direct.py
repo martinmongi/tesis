@@ -40,7 +40,7 @@ if True:
      for v0 in data.depots for v1 in data.original_graph for v2 in data.original_graph[v1]]
     
 
-if options.grouped:
+if True:
     variables += [(vn('RoStoCl', data.v_index(v0), data.v_index(v1),
                       sorted(list(map(data.v_index, c)))), 'I', 0)
                   for v0 in data.depots for v1 in data.stops for c in data.stop_to_clusters[v1]]
@@ -151,7 +151,7 @@ problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs,
                                names=[vn('RoStoSum', data.v_index(v))
                                       for v in data.stops[1:]])
 
-if options.grouped:
+if True:
     # Cluster choices add to cluster size
     rhs = [data.clusters[c] for c in data.clusters]
     sense = ['E' for c in data.clusters]
@@ -338,7 +338,7 @@ else:
 
 if options.heur:
     heur = CoolHeuristic(data)
-    sol = heur.direct_varset([v[0] for v in variables], options.grouped)
+    sol = heur.direct_varset([v[0] for v in variables], True)
     problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
 
 
@@ -366,8 +366,8 @@ for vname in dsol:
         v0, s, st = map(int, sp[1:])
         assignment[data.students[st]] = data.vdictinv[s]
 
-# if options.grouped:
-#     assignment = assign_students_mip(data, gs)
+if True:
+    assignment = assign_students_mip(data, gs)
 
 data.add_solution(assignment, gs)
 data.write_solution(options.out_file if options.out_file else options.in_file + ".out")

@@ -38,7 +38,7 @@ variables = [(vn('Edge', data.v_index(v1), data.v_index(v2)), 'B', data.dist[v1]
     [(vn('RouteActive', data.v_index(v0)), 'B', 0)
      for v0 in data.depots]
 
-if options.grouped:
+if True:
     variables += [(vn('StopCluster', data.v_index(v1), sorted(list(map(data.v_index, c)))), 'I', 0)
                   for v1 in data.stops for c in data.stop_to_clusters[v1]]
 
@@ -107,7 +107,7 @@ constraint = [[
 ] for v in data.stops[1:]]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-if options.grouped:
+if True:
     # Cluster choices add to cluster size
     rhs = [data.clusters[c] for c in data.clusters]
     sense = ['E' for c in data.clusters]
@@ -210,9 +210,9 @@ constraint = [[
 ] for v in data.stops if v != data.school]
 problem.linear_constraints.add(lin_expr=constraint, senses=sense, rhs=rhs)
 
-if options.heur:
+if True:
     heur = CoolHeuristic(data)
-    sol = heur.flat_varset([v[0] for v in variables], options.grouped)
+    sol = heur.flat_varset([v[0] for v in variables], True)
     problem.MIP_starts.add(sol, problem.MIP_starts.effort_level.auto, "cool")
 
 problem.solve()
@@ -245,7 +245,7 @@ for r in gs:
         v = nxt
 del gs[data.school]
 
-if options.grouped:
+if True:
     # pprint(gs)
     assignment = assign_students_mip(data, gs)
 

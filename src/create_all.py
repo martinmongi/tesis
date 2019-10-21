@@ -3,11 +3,11 @@ import subprocess
 
 instances = [
     (barrio, n, estu, buses, cap, maxw)
-    for barrio in ["barracas", "boca"]
+    for barrio in ["telmo", "barracas", "boca"]
     for n in [25]
-    for estu,buses in [(100,2),(200,4),(300,6)]
+    for estu,buses in [(200,4),(300,6),(400,8),(500,10),(600,12)]
     for cap in [60]
-    for maxw in [200,400,800]
+    for maxw in [200]
 ]
 
 for neig, stops, studs, buses, cap, maxw in instances:
